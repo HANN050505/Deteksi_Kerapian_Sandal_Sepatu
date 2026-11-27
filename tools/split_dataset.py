@@ -5,14 +5,16 @@ tersebar ke split berbeda.
 
 Fitur:
 1. Menentukan grup secara otomatis dari metadata nama file (Kelompok_X, NIM 24-XXX, origin ID Kosong).
-2. Mendukung pemuatan metadata grup kustom via berkas JSON (--group-metadata).
-3. Membagi secara terstratifikasi per kelas ke 3 split: train, val, dan test.
-4. Idempotent: membersihkan folder tujuan sebelum menyalin, tidak menumpuk data.
+2. Membedakan foto KOSONG seri train vs val sehingga foto asli tidak tertukar antar seri.
+3. Mendukung pemuatan metadata grup kustom via berkas JSON (--group-metadata).
+4. Membagi secara terstratifikasi per kelas ke 3 split: train, val, dan test.
+5. Menolak eksekusi berbahaya jika direktori output == source atau saling bersarang.
 """
 from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,16 +23,24 @@ import re
 import shutil
 from typing import Any
 
-from PIL import Image
-
 
 def infer_group_id(filename: str) -> str:
-    """Menyimpulkan identitas grup/sesi pengambilan dari nama file citra."""
+    """Menyimpulkan identitas grup/sesi pengambilan dari nama file citra.
+
+    Memastikan foto asli dari seri KOSONG yang berbeda (misal train_kosong vs val_kosong)
+    dikelompokkan ke grup terpisah dan tidak tertukar.
+    """
     fn_lower = filename.lower()
 
-    # 1. Foto kelas KOSONG
+    # 1. Foto kelas KOSONG: bedakan prefix seri sumber (train vs val vs lainnya)
     if "kosong" in fn_lower:
-        # Ekstrak nomor seri gambar unik: misal train_kosong_01_orig.jpg -> KOSONG_01
+        # Menangkap pola seperti train_kosong_01, val_kosong_04, dst.
+        m_prefix_num = re.search(r'([a-z0-9]+)_kosong_(\d+)', fn_lower)
+        if m_prefix_num:
+            prefix = m_prefix_num.group(1).upper()
+            num = m_prefix_num.group(2)
+            return f"KOSONG_{prefix}_{num}"
+
         m_num = re.search(r'kosong_(\d+)', fn_lower)
         if m_num:
             return f"KOSONG_SERIES_{m_num.group(1)}"
@@ -55,32 +65,6 @@ def infer_group_id(filename: str) -> str:
     return f"SINGLE_{Path(filename).stem}"
 
 
-def split_dataset_by_group(
-    source_dir: str | Path,
-    output_dir: str | Path,
-    train_ratio: float = 0.70,
-    val_ratio: float = 0.15,
-    test_ratio: float = 0.15,
-    seed: int = 42,
-    custom_metadata_path: str | Path | None = None,
-) -> dict[str, Any]:
-    """Membagi seluruh dataset menjadi train / val / test per grup."""
-    assert abs((train_ratio + val_ratio + test_ratio) - 1.0) < 1e-5, "Total rasio train + val + test harus 1.0"
-    random.seed(seed)
-
-    src_root = Path(source_dir).resolve()
-    dst_root = Path(output_dir).resolve()
-
-    if not src_root.exists():
-        raise FileNotFoundError(f"Folder sumber tidak ditemukan: {src_root}")
-
-    print("=" * 70)
-    print("  PEMBAGIAN DATASET BERBASIS GRUP (GROUP SPLIT: TRAIN / VAL / TEST)")
-    print(f"  Sumber  : {src_root}")
-    print(f"  Tujuan  : {dst_root}")
-    print(f"  Rasio   : {train_ratio*100:.0f}% Train / {val_ratio*100:.0f}% Val / {test_ratio*100:.0f}% Test (Seed: {seed})")
-    print("=" * 70)
-
 def build_leak_free_groups(
     src_root: Path,
     valid_exts: set[str],
@@ -92,9 +76,6 @@ def build_leak_free_groups(
     digabungkan ke dalam satu klaster grup yang sama (connected component)
     sehingga dijamin masuk ke split yang sama.
     """
-    import hashlib
-
-    # 1. Kumpulkan semua file dan hitung MD5
     class_files: dict[str, list[tuple[Path, str, str]]] = defaultdict(list)
 
     for root, _, files in os.walk(src_root):
@@ -117,7 +98,7 @@ def build_leak_free_groups(
                 except Exception:
                     pass
 
-    # 2. Gabungkan grup yang berbagi citra identik (Disjoint Set Union / DSU)
+    # Hubungkan grup yang berbagi MD5 identik (Disjoint Set Union / DSU)
     class_groups: dict[str, dict[str, list[Path]]] = defaultdict(lambda: defaultdict(list))
 
     for cls_name, file_list in class_files.items():
@@ -133,7 +114,6 @@ def build_leak_free_groups(
             if rx != ry:
                 parent[rx] = ry
 
-        # Hubungkan grup yang berbagi MD5 identik
         md5_groups: dict[str, set[str]] = defaultdict(set)
         for _, grp_id, md5 in file_list:
             md5_groups[md5].add(grp_id)
@@ -143,7 +123,6 @@ def build_leak_free_groups(
             for i in range(1, len(grps_list)):
                 union(grps_list[0], grps_list[i])
 
-        # Bentuk grup final yang terklaster bebas kebocoran
         for p, grp_id, _ in file_list:
             cluster_id = find(grp_id)
             class_groups[cls_name][cluster_id].append(p)
@@ -170,6 +149,18 @@ def split_dataset_by_group(
     if not src_root.exists():
         raise FileNotFoundError(f"Folder sumber tidak ditemukan: {src_root}")
 
+    # Validasi keamanan: Cegah output == source atau saling bersarang
+    if src_root == dst_root:
+        raise ValueError(
+            f"Direktori output tidak boleh sama dengan direktori sumber ({src_root}). "
+            "Pilih direktori tujuan yang terpisah untuk mencegah penghapusan data secara tidak sengaja."
+        )
+    if dst_root in src_root.parents or src_root in dst_root.parents:
+        raise ValueError(
+            f"Direktori sumber dan output tidak boleh saling bersarang: "
+            f"src={src_root}, dst={dst_root}."
+        )
+
     print("=" * 70)
     print("  PEMBAGIAN DATASET BERBASIS GRUP (GROUP SPLIT: TRAIN / VAL / TEST)")
     print(f"  Sumber  : {src_root}")
@@ -188,7 +179,7 @@ def split_dataset_by_group(
     valid_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
     class_groups = build_leak_free_groups(src_root, valid_exts, custom_meta)
 
-    # 2. Bersihkan dan siapkan struktur folder tujuan
+    # 2. Siapkan folder tujuan
     splits = ["train", "val", "test"]
     for split in splits:
         for cls_name in ["BERANTAKAN", "RAPI", "KOSONG"]:
@@ -208,11 +199,10 @@ def split_dataset_by_group(
             "val": total_cls_imgs * val_ratio,
             "test": total_cls_imgs * test_ratio,
         }
+
         alloc_counts: dict[str, int] = {s: 0 for s in splits}
         alloc_groups: dict[str, list[str]] = {s: [] for s in splits}
 
-        # Urutkan grup secara descending agar grup besar dialokasikan terlebih dahulu,
-        # dengan pengacakan terkontrol pada grup berukuran sama
         sorted_groups = sorted(
             groups_dict.keys(),
             key=lambda g: (len(groups_dict[g]), random.random()),
@@ -221,7 +211,6 @@ def split_dataset_by_group(
 
         for grp in sorted_groups:
             n_imgs = len(groups_dict[grp])
-            # Pilih split yang memiliki defisit alokasi relatif terbesar
             best_split = max(
                 splits,
                 key=lambda s: (targets[s] - alloc_counts[s]) / max(targets[s], 1.0),
@@ -229,7 +218,6 @@ def split_dataset_by_group(
             alloc_groups[best_split].append(grp)
             alloc_counts[best_split] += n_imgs
 
-        # Salin file ke masing-masing split
         for split_name in splits:
             for grp in alloc_groups[split_name]:
                 assigned_groups[f"{cls_name}:{grp}"] = split_name
@@ -271,8 +259,8 @@ def split_dataset_by_group(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Split Dataset Berbasis Grup (Train/Val/Test)")
-    parser.add_argument("--source", default="dataset", help="Direktori dataset sumber")
-    parser.add_argument("--output", default="dataset", help="Direktori dataset tujuan")
+    parser.add_argument("--source", default="dataset_backup_phase3", help="Direktori dataset sumber")
+    parser.add_argument("--output", default="dataset_group_split", help="Direktori dataset tujuan")
     parser.add_argument("--train-ratio", type=float, default=0.70, help="Rasio train (default 0.70)")
     parser.add_argument("--val-ratio", type=float, default=0.15, help="Rasio val (default 0.15)")
     parser.add_argument("--test-ratio", type=float, default=0.15, help="Rasio test (default 0.15)")

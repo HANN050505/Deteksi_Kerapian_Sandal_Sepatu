@@ -64,11 +64,13 @@ plt.rcParams['font.size'] = 11
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
-RUNS_DIR = os.path.join(BASE_DIR, "runs", "yolov8_sandal_v3") if os.path.exists(os.path.join(BASE_DIR, "runs", "yolov8_sandal_v3")) else os.path.join(BASE_DIR, "runs", "yolov8_sandal")
+TRAINING_DIR = os.path.join(BASE_DIR, "reports", "training")
+RUNS_DIR = TRAINING_DIR if os.path.exists(TRAINING_DIR) else os.path.join(BASE_DIR, "runs", "yolov8_sandal_group_split")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
 
 print(f"Direktori Proyek: {BASE_DIR}")
 print(f"Dataset Path   : {DATASET_DIR} (Tersedia: {os.path.exists(DATASET_DIR)})")
+print(f"Training Artifacts: {RUNS_DIR} (Tersedia: {os.path.exists(RUNS_DIR)})")
 print(f"Model Path     : {MODEL_PATH} (Tersedia: {os.path.exists(MODEL_PATH)})")
 """))
 
@@ -242,10 +244,24 @@ display(df_risk[['Risk_ID', 'Faktor_Risiko', 'Risk_Score', 'Mitigasi_Teknis']])
 # 6. KPI ALIGNMENT TABLE
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 1.6 PENYELARASAN METRIK KPI BISNIS & TEKNIS
+# Pemuatan data KPI terukur dari reports/evaluation_report.json
+import json
+report_path = os.path.join(BASE_DIR, "reports", "evaluation_report.json")
+acc_display = "Belum dievaluasi"
+far_display = "Belum dievaluasi"
+if os.path.exists(report_path):
+    with open(report_path, "r", encoding="utf-8") as f:
+        rep = json.load(f)
+    c = rep.get("comparison", {})
+    if "ensemble" in c:
+        acc_display = f"{c['ensemble'].get('accuracy', 0)*100:.2f}%"
+    if "ensemble_threshold" in c:
+        far_display = f"{c['ensemble_threshold'].get('false_alarm_rate', 0)*100:.2f}%"
+
 kpi_table = pd.DataFrame({
     'No': [1, 2, 3, 4, 5],
     'Metrik KPI': [
-        'Top-1 Validation Accuracy',
+        'Top-1 Test Accuracy',
         'Inference Latency per Frame',
         'False Positive Alarm Rate',
         'Tingkat Kepatuhan Praktikan',
@@ -253,8 +269,8 @@ kpi_table = pd.DataFrame({
     ],
     'Kategori': ['Teknis ML', 'Teknis Sistem', 'Teknis Sistem', 'Dampak Operasional', 'Dampak Operasional'],
     'Target Ideal': ['>= 90%', '< 100 ms', '< 5%', '>= 75%', '>= 70%'],
-    'Capaian Aktual': ['92.65%', '~10 ms (CPU)', '< 3% (Kelas Kosong + Temporal)', '82.0% (Simulasi)', '85% Penghematan Jam Kerja'],
-    'Status': ['TERCAPAI ✅', 'TERCAPAI ✅', 'TERCAPAI ✅', 'TERCAPAI ✅', 'TERCAPAI ✅']
+    'Capaian Aktual': [acc_display, '~672 ms (CPU)', far_display, 'Target Pilot Lapangan', 'Estimasi Operasional'],
+    'Status / Tipe': ['Hasil Terukur', 'Hasil Terukur', 'Hasil Terukur', 'Asumsi / Simulasi', 'Asumsi / Simulasi']
 })
 display(kpi_table)
 """))
@@ -571,10 +587,17 @@ ax.set_title('Matriks Nilai Bisnis (Business Payoff Matrix 3-Kelas)', fontsize=1
 plt.tight_layout()
 plt.show()
 
-# Simulasi 1.000 Deteksi Lapangan dengan Akurasi Model 92.65%:
-# Asumsi Distribusi Lapangan: 35% Berantakan, 40% Rapi, 25% Kosong
+# Simulasi 1.000 Deteksi Lapangan Berdasarkan Akurasi Model Terukur:
+# Membaca akurasi dari evaluasi test set riil jika ada, atau default 0.9559
+acc = 0.9559
+if os.path.exists(report_path):
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            rep_data = json.load(f)
+        acc = float(rep_data.get("comparison", {}).get("ensemble", {}).get("accuracy", 0.9559))
+    except Exception:
+        pass
 n_events = 1000
-acc = 0.9265
 err = 1.0 - acc
 
 tp_count = int(n_events * 0.35 * acc)
@@ -649,7 +672,7 @@ cells.append(nbf.v4.new_markdown_cell("""---
 
 ### 4.1 Rangkuman Temuan Bisnis & Data:
 1. **Pemisahan Status Hasil**:
-   - **Hasil Terukur (Empirical)**: Akurasi test set independen ($N=68$) mencapai **95.59%** (Ensemble) dan **97.06%** (Single Model). Penerapan threshold keyakinan (70%) memangkas False Alarm Rate menjadi **4.35%**.
+   - **Hasil Terukur (Empirical)**: Akurasi test set independen ($N=68$) mencapai **95.59%** (Single Model dan Ensemble terukur identik). Penerapan threshold keyakinan (70%) memangkas False Alarm Rate menjadi **4.35%**.
    - **Target Proyek**: Target akurasi $\ge 90\%$ dan False Alarm Rate $< 10\%$ terverifikasi tercapai pada pengujian riil.
    - **Asumsi / Simulasi**: Efisiensi jam kerja laboran dan tingkat kepatuhan praktikan disajikan sebagai estimasi simulasi operasional.
 2. **Kualitas Dataset (3 Kelas Bebas Kebocoran)**:

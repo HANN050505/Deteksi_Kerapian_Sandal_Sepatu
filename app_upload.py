@@ -50,6 +50,9 @@ from core import (
     DEFAULT_AUDIO_PATH,
     DEFAULT_MODEL_PATH,
     BASE_DIR as CORE_BASE_DIR,
+    TRAINING_REPORTS_DIR,
+    get_evaluation_metrics_summary,
+    load_evaluation_report,
 )
 
 class FreshFrameCapture:
@@ -125,7 +128,7 @@ st.set_page_config(
 MODEL_PATH = DEFAULT_MODEL_PATH
 AUDIO_PATH = DEFAULT_AUDIO_PATH
 VAL_DIR    = os.path.join(CORE_BASE_DIR, "dataset", "val")
-RUNS_DIR   = os.path.join(CORE_BASE_DIR, "runs", "yolov8_sandal_v3")
+RUNS_DIR   = str(TRAINING_REPORTS_DIR)
 
 @st.cache_resource
 def load_model():
@@ -586,40 +589,32 @@ with tab_metrics:
     Model dilatih menggunakan arsitektur **YOLOv8 Nano Classifier (Pretrained Transfer Learning)** dengan optimasi **AdamW** dan **Cosine Annealing Learning Rate**. Sistem mengenali 3 kelas kondisi: **BERANTAKAN**, **RAPI**, dan **KOSONG** (lantai bersih/standby).
     """)
 
-    # Pemuatan data laporan evaluasi dinamis dari reports/
-    eval_json_path = os.path.join(CORE_BASE_DIR, "reports", "evaluation_report.json")
+    # Pemuatan data laporan evaluasi dinamis via core.report (Single Source of Truth)
+    summary = get_evaluation_metrics_summary()
     cm_eval_img_path = os.path.join(CORE_BASE_DIR, "reports", "confusion_matrix_eval.png")
 
-    eval_data = None
-    if os.path.exists(eval_json_path):
-        try:
-            import json
-            with open(eval_json_path, "r", encoding="utf-8") as f:
-                eval_data = json.load(f)
-        except Exception as e:
-            st.warning(f"Gagal membaca evaluation_report.json: {e}")
+    if summary["evaluated"]:
+        single = summary.get("single") or {}
+        ens = summary.get("ensemble") or {}
+        ens_thresh = summary.get("ensemble_threshold") or {}
+        split_name = str(summary.get("split", "test")).upper()
+        n_samples = summary.get("total_samples", 0)
 
-    if eval_data:
-        comp = eval_data.get("comparison", {})
-        ens = comp.get("ensemble", {})
-        single = comp.get("single", {})
-        ens_thresh = comp.get("ensemble_threshold", {})
-        split_name = eval_data.get("dataset_split", "test").upper()
-        n_samples = eval_data.get("total_samples", 68)
-
-        # Kartu KPI Terukur Objektif
+        # Kartu KPI Terukur Objektif (semua dibaca langsung dari laporan JSON)
         kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-        acc_pct = ens.get("accuracy", 0.9559) * 100
-        ci_95 = ens.get("accuracy_ci_95", [0.878, 0.985])
-        far_pct = ens_thresh.get("false_alarm_rate", 0.0435) * 100
+        acc_pct = float(ens.get("accuracy", 0.0)) * 100
+        ci_95 = ens.get("accuracy_ci_95", [0.0, 0.0])
+        far_pct = float(ens_thresh.get("false_alarm_rate", 0.0)) * 100
+        fa_count = ens_thresh.get("false_alarm_count", 0)
+        true_rapi = ens_thresh.get("total_true_rapi", 0)
 
         kpi1.metric("Top-1 Accuracy", f"{acc_pct:.2f}%", f"CI: [{ci_95[0]*100:.1f}%, {ci_95[1]*100:.1f}%]")
-        kpi2.metric("False Alarm Rate", f"{far_pct:.2f}%", "1/23 RAPI salah")
+        kpi2.metric("False Alarm Rate", f"{far_pct:.2f}%", f"{fa_count}/{true_rapi} RAPI salah")
         kpi3.metric("Test Set Independen", f"{n_samples} Citra", f"Split {split_name} Bebas Bocor")
         kpi4.metric("Klasifikasi Citra", "3 Kelas", "Berantakan/Rapi/Kosong")
-        kpi5.metric("Latensi Riil CPU", "~720 ms", "Spatial Ensemble")
+        kpi5.metric("Latensi Riil CPU", "~672 ms", "Spatial Ensemble")
 
-        st.info(f"📋 **Hasil Pengukuran Terukur Objektif:** Data evaluasi di bawah diperoleh dari pengujian empiris pada **{split_name} SET** ({n_samples} sampel independen tanpa kebocoran data).")
+        st.info(f"📋 **Hasil Pengukuran Terukur Objektif:** Data evaluasi di bawah diperoleh dari pengujian empiris pada **{split_name} SET** ({n_samples} sampel independen tanpa duplikat persis / near-duplicate).")
 
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -665,12 +660,12 @@ with tab_metrics:
             st.markdown("##### 📊 Visualisasi Confusion Matrix Komparatif (Single vs Ensemble vs Threshold)")
             st.image(cm_eval_img_path, caption="Confusion Matrix Terukur pada Test Set Independen", use_container_width=True)
     else:
-        st.warning("File laporan `reports/evaluation_report.json` belum ditemukan. Jalankan `python evaluate.py` untuk mengukur performa terkini.")
+        st.warning("⚠️ **Status: Belum Dievaluasi.** File laporan `reports/evaluation_report.json` belum tersedia. Jalankan `python evaluate.py` untuk mengukur performa secara objektif.")
 
     st.markdown("---")
     st.markdown("""
     ### 📋 Pemisahan Status: Terukur vs Target vs Asumsi
-    - **Hasil Terukur (Empirical)**: Akurasi test set terukur sebesar **95.59%** (Ensemble) dan **97.06%** (Single Model). Ambang batas keyakinan (70%) berhasil memangkas False Alarm Rate dari 8.70% menjadi **4.35%**.
-    - **Target Sistem**: Target teknis Top-1 Accuracy $\ge 90\%$ dan False Alarm Rate $< 10\%$ telah tercapai pada test set independen.
+    - **Hasil Terukur (Empirical)**: Akurasi test set terukur sebesar **95.59%** (Single Model dan Ensemble terukur identik). Ambang batas keyakinan (70%) memangkas False Alarm Rate dari 8.70% menjadi **4.35%**.
+    - **Target Sistem**: Target teknis Top-1 Accuracy $\ge 90\%$ tercapai pada test set independen ($N=68$).
     - **Asumsi / Simulasi**: Peringatan suara diasumsikan dapat memicu kesadaran mandiri mahasiswa (efek *behavioral nudge*). Validasi dampak kedisiplinan riil memerlukan pencatatan longitudinal di lapangan.
     """)

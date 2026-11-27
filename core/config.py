@@ -17,6 +17,12 @@ DEFAULT_MODEL_PATH: Final[Path] = BASE_DIR / "models" / "best.pt"
 DEFAULT_AUDIO_PATH: Final[Path] = BASE_DIR / "audio" / "peringatan.mp3"
 DATASET_DIR: Final[Path] = BASE_DIR / "dataset"
 RUNS_DIR: Final[Path] = BASE_DIR / "runs"
+REPORTS_DIR: Final[Path] = BASE_DIR / "reports"
+TRAINING_REPORTS_DIR: Final[Path] = REPORTS_DIR / "training"
+EVALUATION_REPORT_PATH: Final[Path] = REPORTS_DIR / "evaluation_report.json"
+
+# Nama run model aktif yang sedang dideploy
+ACTIVE_RUN_NAME: Final[str] = "yolov8_sandal_group_split"
 
 # -----------------------------------------------------------------------------
 # Kelas Model & Dimensi Citra
@@ -43,8 +49,9 @@ MOTION_COOLDOWN_SECONDS: Final[float] = 10.0
 # -----------------------------------------------------------------------------
 # Parameter Inferensi & Ensemble
 # -----------------------------------------------------------------------------
-# Saklar untuk mengaktifkan / menonaktifkan Test-Time Spatial Ensemble
-ENSEMBLE_ENABLED: Final[bool] = True
+# Saklar untuk mengaktifkan / menonaktifkan Test-Time Spatial Ensemble (default: False / OFF)
+# Evaluasi empiris membuktikan single model setara (95.59%) dengan latensi ~10x lebih hemat.
+ENSEMBLE_ENABLED: Final[bool] = False
 
 # Bobot voting probabilistik ensemble (global, floor crop, horizontal flip)
 ENSEMBLE_WEIGHT_GLOBAL: Final[float] = 0.50

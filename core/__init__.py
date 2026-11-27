@@ -3,6 +3,7 @@ Paket Core Smart Shoe Monitor.
 Menyediakan modul konfigurasi terpusat, watcher pergerakan, dan pipeline inferensi AI.
 """
 from core.config import (
+    ACTIVE_RUN_NAME,
     BASE_DIR,
     CLASSES,
     CONFIDENCE_THRESHOLD,
@@ -13,15 +14,18 @@ from core.config import (
     DEFAULT_STREAMLIT_HOST,
     DEFAULT_STREAMLIT_PORT,
     ENSEMBLE_ENABLED,
+    EVALUATION_REPORT_PATH,
     FLOOR_ROI_TOP_RATIO,
     MOTION_COOLDOWN_SECONDS,
     MOTION_SCORE_THRESHOLD,
     MOTION_SETTLE_SECONDS,
     PERIODIC_EVAL_SECONDS,
     PERIODIC_RECHECK_SECONDS,
+    REPORTS_DIR,
     RUNS_DIR,
     TEMPORAL_VOTING_MIN_HITS,
     TEMPORAL_VOTING_WINDOW,
+    TRAINING_REPORTS_DIR,
     USE_LETTERBOX_PREPROCESSING,
 )
 from core.inference import (
@@ -32,8 +36,14 @@ from core.inference import (
     predict_single,
 )
 from core.motion import DetectorState, MotionSettlementWatcher
+from core.report import (
+    get_evaluation_metrics_summary,
+    get_training_artifacts_dir,
+    load_evaluation_report,
+)
 
 __all__ = [
+    "ACTIVE_RUN_NAME",
     "BASE_DIR",
     "CLASSES",
     "CONFIDENCE_THRESHOLD",
@@ -45,6 +55,7 @@ __all__ = [
     "DEFAULT_STREAMLIT_PORT",
     "DetectorState",
     "ENSEMBLE_ENABLED",
+    "EVALUATION_REPORT_PATH",
     "FLOOR_ROI_TOP_RATIO",
     "MOTION_COOLDOWN_SECONDS",
     "MOTION_SCORE_THRESHOLD",
@@ -52,11 +63,17 @@ __all__ = [
     "MotionSettlementWatcher",
     "PERIODIC_EVAL_SECONDS",
     "PERIODIC_RECHECK_SECONDS",
+    "REPORTS_DIR",
+    "RUNS_DIR",
     "TEMPORAL_VOTING_MIN_HITS",
     "TEMPORAL_VOTING_WINDOW",
+    "TRAINING_REPORTS_DIR",
     "USE_LETTERBOX_PREPROCESSING",
     "draw_detection_overlay",
+    "get_evaluation_metrics_summary",
+    "get_training_artifacts_dir",
     "letterbox_to_square",
+    "load_evaluation_report",
     "load_model",
     "predict_ensemble",
     "predict_single",

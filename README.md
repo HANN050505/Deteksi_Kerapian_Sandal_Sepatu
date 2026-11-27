@@ -116,6 +116,17 @@ python diagnostik_prototype.py
 
 ---
 
+### 5. Pelatihan Ulang Model (Reproducible Training)
+Pelatihan model dilakukan menggunakan arsitektur transfer learning `yolov8n-cls` pada dataset group-split:
+```bash
+python train.py --epochs 25 --batch 16 --device cpu --name yolov8_sandal_group_split --seed 42
+```
+- **Spesifikasi Pelatihan**: Optimizer `AdamW`, `cos_lr=True`, `patience=12`, augmentasi resmi Ultralytics (`randaugment`, `fliplr=0.5`, `scale=0.2`, `erasing=0.2`).
+- **Pencegahan Overwrite**: Skrip `train.py` secara default menghasilkan nama run unik bertanggal untuk mencegah penimpaan run sebelumnya secara tidak sengaja (opsi `--exist-ok` tersedia jika ingin menimpa).
+- **Pelacakan Artefak**: Bobot model terbaik diekspor ke `models/best.pt` dan seluruh kurva metrik disalin ke `reports/training/` (`results.csv`, `args.yaml`, `results.png`).
+
+---
+
 ## 🧠 Fitur Pintar & Logika Real-Time
 
 1. **Dual Interface**: Mendukung pemantauan video stream kamera *real-time* sekaligus pengujian interaktif berbasis *upload foto*.

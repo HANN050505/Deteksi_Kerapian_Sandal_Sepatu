@@ -36,7 +36,7 @@ Untuk menjaga kejujuran ilmiah dan ketepatan evaluasi teknik, metrik keberhasila
 
 | Kategori | Parameter KPI | Target Acuan | Status & Hasil Nyata | Keterangan Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Teknis (Technical KPI)** | Top-1 Classification Accuracy | $\ge 90.0\%$ | **95.59%** (Ensemble) / **97.06%** (Single) | **Hasil Terukur** (Test Set Independen, $N=68$) |
+| **Teknis (Technical KPI)** | Top-1 Classification Accuracy | $\ge 90.0\%$ | **95.59%** (Single & Ensemble terukur identik) | **Hasil Terukur** (Test Set Independen, $N=68$) |
 | | Wilson 95% Confidence Interval | Rentang $\pm 10\%$ | **[87.8%, 98.5%]** (Ensemble) | **Hasil Terukur** (Wilson Score Interval) |
 | | False Alarm Rate (RAPI $\rightarrow$ BER) | $< 10.0\%$ | **4.35%** (1/23 RAPI salah diprediksi) | **Hasil Terukur** (Ensemble + Threshold 70%) |
 | | Latensi Pipeline Penuh (CPU) | $< 1500$ ms | **~720 - 1440 ms** (Ensemble 3-View) | **Hasil Terukur** (Worker Async terpisah, FPS kamera 30+) |
@@ -104,7 +104,7 @@ Total: 425 citra (22 citra KOSONG unik lapangan)
 ### 2.4 Evaluasi Kualitas Data & Tantangan (Data Quality Assessment)
 1. **Ukuran Dataset Ringkas (*Dataset Overview*)**:
    - Total 425 gambar (357 data latih dan 68 data validasi) mencakup tiga kondisi operasional lapangan: BERANTAKAN, RAPI, dan KOSONG.
-   - *Analisis Solusi*: Pendekatan arsitektur **YOLOv8n-cls** yang memanfaatkan bobot awal (*pre-trained on ImageNet*) terbukti efektif karena model telah memiliki fitur representasi tepi, tekstur, dan bentuk dasar sejak awal, sehingga mampu mencapai akurasi 92% tanpa mengalami overfitting parah.
+   - *Analisis Solusi*: Pendekatan arsitektur **YOLOv8n-cls** yang memanfaatkan bobot awal (*pre-trained on ImageNet*) terbukti efektif karena model telah memiliki fitur representasi tepi, tekstur, dan bentuk dasar sejak awal, sehingga mampu mencapai akurasi terukur 95.59% pada data uji tanpa mengalami overfitting parah.
 2. **Variasi Background**:
    - Sebagian besar berlatar belakang lantai keramik putih atau bermotif abu-abu/krem. Sandal dengan warna kontras (merah, biru, hitam) sangat mudah dikenali.
 3. **Resolusi Input**:
