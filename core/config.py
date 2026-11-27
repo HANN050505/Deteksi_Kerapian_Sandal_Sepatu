@@ -53,6 +53,23 @@ ENSEMBLE_WEIGHT_FLIP: Final[float] = 0.15
 
 # Ambang keyakinan minimum (confidence threshold)
 CONFIDENCE_THRESHOLD: Final[float] = 0.70
+CONFIDENCE_UNCERTAIN_LABEL: Final[str] = "RAGU"
+
+# -----------------------------------------------------------------------------
+# Parameter Temporal Voting & Evaluasi Real-Time (Fase 2)
+# -----------------------------------------------------------------------------
+# Temporal voting: minimal K dari N evaluasi berurutan harus 'BERANTAKAN' sebelum audio berbunyi
+TEMPORAL_VOTING_WINDOW: Final[int] = 3
+TEMPORAL_VOTING_MIN_HITS: Final[int] = 2
+
+# Evaluasi periodik saat STANDBY (mendeteksi kondisi berantakan sejak awal)
+PERIODIC_EVAL_SECONDS: Final[float] = 15.0
+
+# Re-check berkala setelah audio berbunyi / dalam masa pemantauan
+PERIODIC_RECHECK_SECONDS: Final[float] = 10.0
+
+# Preprocessing Letterbox/Square Pad (menjaga seluruh bidang pandang tanpa terpotong center crop)
+USE_LETTERBOX_PREPROCESSING: Final[bool] = True
 
 # -----------------------------------------------------------------------------
 # Pengaturan Server Streamlit

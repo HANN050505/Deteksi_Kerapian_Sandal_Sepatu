@@ -5,6 +5,7 @@ sebelum capture otomatis dievaluasi oleh model deep learning.
 """
 from __future__ import annotations
 
+from enum import Enum
 import time
 from typing import Literal
 
@@ -20,7 +21,17 @@ from core.config import (
     MOTION_SETTLE_SECONDS,
 )
 
-WatcherState = Literal["STANDBY", "PERSON_MOVING", "SETTLING", "COOLDOWN"]
+
+class DetectorState(str, Enum):
+    """Enumerasi state eksplisit detektor pergerakan."""
+    STANDBY = "STANDBY"
+    PERSON_MOVING = "PERSON_MOVING"
+    SETTLING = "SETTLING"
+    TRIGGER_SNAPSHOT = "TRIGGER_SNAPSHOT"
+    COOLDOWN = "COOLDOWN"
+
+
+WatcherState = Literal["STANDBY", "PERSON_MOVING", "SETTLING", "TRIGGER_SNAPSHOT", "COOLDOWN"]
 
 
 class MotionSettlementWatcher:
@@ -45,24 +56,26 @@ class MotionSettlementWatcher:
         self.roi_top_ratio: float = float(roi_top_ratio)
 
         self.prev_gray: np.ndarray | None = None
-        self.state: WatcherState = "STANDBY"
+        self.state: DetectorState = DetectorState.STANDBY
         self.last_motion_time: float = 0.0
         self.motion_start_time: float = 0.0
         self.last_trigger_time: float = 0.0
         self.activity_detected: bool = False
+        self.motion_during_cooldown: bool = False
         self.motion_score: float = 0.0
 
     def reset(self) -> None:
         """Mereset kondisi internal watcher."""
         self.prev_gray = None
-        self.state = "STANDBY"
+        self.state = DetectorState.STANDBY
         self.last_motion_time = 0.0
         self.motion_start_time = 0.0
         self.last_trigger_time = 0.0
         self.activity_detected = False
+        self.motion_during_cooldown = False
         self.motion_score = 0.0
 
-    def update(self, frame_bgr: np.ndarray) -> tuple[WatcherState, bool, float]:
+    def update(self, frame_bgr: np.ndarray) -> tuple[str, bool, float]:
         """Memproses satu frame citra BGR dan memperbarui status aktivitas.
 
         Args:
@@ -70,7 +83,7 @@ class MotionSettlementWatcher:
 
         Returns:
             Tuple berisi:
-            - state: Status saat ini ("STANDBY", "PERSON_MOVING", "SETTLING", "COOLDOWN").
+            - state: Status saat ini ("STANDBY", "PERSON_MOVING", "SETTLING", "TRIGGER_SNAPSHOT", "COOLDOWN").
             - triggered: True jika kondisi tepat untuk memicu snapshot evaluasi.
             - motion_score: Skor intensitas pergerakan piksel saat ini (0.0 - 1.0).
         """
@@ -88,7 +101,7 @@ class MotionSettlementWatcher:
 
         if self.prev_gray is None:
             self.prev_gray = gray.copy()
-            return "STANDBY", False, 0.0
+            return DetectorState.STANDBY.value, False, 0.0
 
         diff = cv2.absdiff(self.prev_gray, gray)
         _, thresh = cv2.threshold(diff, MOTION_DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
@@ -96,22 +109,40 @@ class MotionSettlementWatcher:
         self.motion_score = motion_score
         self.prev_gray = gray.copy()
 
-        # Handle masa Cooldown
-        if self.state == "COOLDOWN":
-            if now - self.last_trigger_time >= self.cooldown_sec:
-                self.state = "STANDBY"
-            else:
-                return "COOLDOWN", False, motion_score
-
         is_moving = motion_score > self.motion_thresh
+
+        # Handle masa Cooldown (Fase 2: Catat gerakan selama cooldown, lalu evaluasi setelah cooldown)
+        if self.state == DetectorState.COOLDOWN:
+            if is_moving:
+                self.motion_during_cooldown = True
+                self.last_motion_time = now
+
+            if now - self.last_trigger_time >= self.cooldown_sec:
+                # Masa cooldown berakhir
+                if self.motion_during_cooldown or is_moving:
+                    # Terjadi pergerakan saat cooldown, evaluasi ulang setelah kondisi stabil
+                    self.activity_detected = True
+                    self.motion_during_cooldown = False
+                    if is_moving:
+                        self.state = DetectorState.PERSON_MOVING
+                        return DetectorState.PERSON_MOVING.value, False, motion_score
+                    else:
+                        self.state = DetectorState.SETTLING
+                        return DetectorState.SETTLING.value, False, motion_score
+                else:
+                    self.state = DetectorState.STANDBY
+                    self.activity_detected = False
+                    return DetectorState.STANDBY.value, False, motion_score
+            else:
+                return DetectorState.COOLDOWN.value, False, motion_score
 
         if is_moving:
             self.last_motion_time = now
             if not self.activity_detected:
                 self.activity_detected = True
                 self.motion_start_time = now
-            self.state = "PERSON_MOVING"
-            return "PERSON_MOVING", False, motion_score
+            self.state = DetectorState.PERSON_MOVING
+            return DetectorState.PERSON_MOVING.value, False, motion_score
 
         # Jika tidak ada gerakan, periksa apakah baru saja ada aktivitas
         if self.activity_detected:
@@ -119,11 +150,12 @@ class MotionSettlementWatcher:
             if quiet_duration >= self.settle_sec:
                 # Kondisi tenang tercapai setelah aktivitas: trigger snapshot!
                 self.activity_detected = False
-                self.state = "COOLDOWN"
+                self.state = DetectorState.COOLDOWN
                 self.last_trigger_time = now
-                return "COOLDOWN", True, motion_score
-            self.state = "SETTLING"
-            return "SETTLING", False, motion_score
+                self.motion_during_cooldown = False
+                return DetectorState.TRIGGER_SNAPSHOT.value, True, motion_score
+            self.state = DetectorState.SETTLING
+            return DetectorState.SETTLING.value, False, motion_score
 
-        self.state = "STANDBY"
-        return "STANDBY", False, motion_score
+        self.state = DetectorState.STANDBY
+        return DetectorState.STANDBY.value, False, motion_score

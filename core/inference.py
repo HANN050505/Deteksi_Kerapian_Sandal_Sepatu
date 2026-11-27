@@ -16,6 +16,8 @@ from ultralytics import YOLO
 
 from core.config import (
     CLASSES,
+    CONFIDENCE_THRESHOLD,
+    CONFIDENCE_UNCERTAIN_LABEL,
     DEFAULT_MODEL_PATH,
     ENSEMBLE_ENABLED,
     ENSEMBLE_WEIGHT_CROP,
@@ -23,10 +25,37 @@ from core.config import (
     ENSEMBLE_WEIGHT_GLOBAL,
     FLOOR_ROI_TOP_RATIO,
     IMG_SIZE,
+    USE_LETTERBOX_PREPROCESSING,
 )
 
 # Batasi thread PyTorch CPU agar efisien dan tidak membebani prosesor
 torch.set_num_threads(2)
+
+
+def letterbox_to_square(
+    img_pil: Image.Image,
+    fill_color: tuple[int, int, int] = (114, 114, 114),
+) -> Image.Image:
+    """Pad citra ke bentuk bujur sangkar (square) agar seluruh area terjaga.
+
+    Mencegah pemotongan sisi kiri dan kanan (horizontal FOV) yang secara default
+    terjadi pada center-crop Ultralytics classify_transforms.
+
+    Args:
+        img_pil: Citra PIL masukan.
+        fill_color: Warna padding netral (default gray 114).
+
+    Returns:
+        Citra PIL bujur sangkar dengan rasio aspek asli yang terjaga di tengah.
+    """
+    w, h = img_pil.size
+    if w == h:
+        return img_pil
+    max_side = max(w, h)
+    padded = Image.new("RGB", (max_side, max_side), fill_color)
+    paste_pos = ((max_side - w) // 2, (max_side - h) // 2)
+    padded.paste(img_pil, paste_pos)
+    return padded
 
 
 def load_model(model_path: str | Path | None = None) -> YOLO:
@@ -55,9 +84,18 @@ def load_model(model_path: str | Path | None = None) -> YOLO:
 
 
 def _to_pil_and_bgr(
-    img_pil_or_bgr: Image.Image | np.ndarray,
+    img_pil_or_bgr: Image.Image | np.ndarray | str | Path,
 ) -> tuple[Image.Image, np.ndarray]:
-    """Mengonversi masukan citra fleksibel menjadi pasangan (PIL.Image, BGR np.ndarray)."""
+    """Mengonversi masukan citra fleksibel (PIL, NumPy BGR, atau path berkas) menjadi pasangan (PIL.Image, BGR np.ndarray)."""
+    if isinstance(img_pil_or_bgr, (str, Path)):
+        p = Path(img_pil_or_bgr)
+        if not p.exists():
+            raise FileNotFoundError(f"File citra tidak ditemukan: {p}")
+        img_pil = Image.open(p).convert("RGB")
+        frame_bgr = cv2.imread(str(p))
+        if frame_bgr is None:
+            frame_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        return img_pil, frame_bgr
     if isinstance(img_pil_or_bgr, Image.Image):
         img_rgb = img_pil_or_bgr.convert("RGB")
         frame_bgr = cv2.cvtColor(np.array(img_rgb), cv2.COLOR_RGB2BGR)
@@ -73,6 +111,8 @@ def predict_single(
     model: YOLO,
     img_pil_or_bgr: Image.Image | np.ndarray,
     img_size: int = IMG_SIZE,
+    use_letterbox: bool = USE_LETTERBOX_PREPROCESSING,
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     """Menjalankan prediksi tunggal (single perspective) pada satu citra utuh.
 
@@ -80,12 +120,16 @@ def predict_single(
         model: Instance model YOLOv8.
         img_pil_or_bgr: Citra masukan (PIL Image atau NumPy BGR).
         img_size: Resolusi inferensi model.
+        use_letterbox: Gunakan letterbox/pad ke bujur sangkar agar tepi tidak terpotong.
+        confidence_threshold: Ambang batas keyakinan minimum (jika di bawah ambang, label = "RAGU").
 
     Returns:
         Dictionary hasil prediksi berisi label teratas, confidence, dan sebaran probabilitas.
     """
     img_pil, frame_bgr = _to_pil_and_bgr(img_pil_or_bgr)
-    results = model.predict(source=img_pil, verbose=False, device="cpu", imgsz=img_size)
+    inp_img = letterbox_to_square(img_pil) if use_letterbox else img_pil
+
+    results = model.predict(source=inp_img, verbose=False, device="cpu", imgsz=img_size)
     res = results[0]
     names = res.names
     raw_probs = res.probs
@@ -101,12 +145,17 @@ def predict_single(
     top_label = max(probs, key=probs.get)  # type: ignore[arg-type]
     top_conf = probs[top_label]
 
-    annotated_bgr = draw_detection_overlay(frame_bgr, {"label": top_label, "confidence": top_conf})
+    is_confident = bool(top_conf >= confidence_threshold)
+    final_label = top_label if is_confident else CONFIDENCE_UNCERTAIN_LABEL
+
+    annotated_bgr = draw_detection_overlay(frame_bgr, {"label": final_label, "confidence": top_conf})
     annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
 
     return {
-        "label": top_label,
+        "label": final_label,
+        "raw_label": top_label,
         "confidence": top_conf,
+        "is_confident": is_confident,
         "probs": probs,
         "mode": "single",
         "frame_bgr": frame_bgr,
@@ -120,6 +169,8 @@ def predict_ensemble(
     enable_ensemble: bool | None = None,
     roi_top_ratio: float = FLOOR_ROI_TOP_RATIO,
     img_size: int = IMG_SIZE,
+    use_letterbox: bool = USE_LETTERBOX_PREPROCESSING,
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     """Menjalankan evaluasi Test-Time Spatial Ensemble (Global + Floor Crop + Flip TTA).
 
@@ -131,6 +182,8 @@ def predict_ensemble(
         enable_ensemble: Opsi mengaktifkan ensemble. Jika None, mengikuti ENSEMBLE_ENABLED.
         roi_top_ratio: Rasio batas atas pemotongan fokus lantai.
         img_size: Resolusi inferensi model.
+        use_letterbox: Gunakan letterbox/pad ke bujur sangkar agar tepi tidak terpotong.
+        confidence_threshold: Ambang batas keyakinan minimum (jika di bawah ambang, label = "RAGU").
 
     Returns:
         Dictionary komprehensif berisi label konsensus, confidence, probabilitas gabungan,
@@ -139,7 +192,13 @@ def predict_ensemble(
     is_ensemble = ENSEMBLE_ENABLED if enable_ensemble is None else enable_ensemble
 
     if not is_ensemble:
-        return predict_single(model, img_pil_or_bgr, img_size=img_size)
+        return predict_single(
+            model,
+            img_pil_or_bgr,
+            img_size=img_size,
+            use_letterbox=use_letterbox,
+            confidence_threshold=confidence_threshold,
+        )
 
     img_pil, frame_bgr = _to_pil_and_bgr(img_pil_or_bgr)
     w, h = img_pil.size
@@ -151,10 +210,15 @@ def predict_ensemble(
     # 2. Perspektif Flip Horizontal (Test-Time Augmentation)
     flip_img = img_pil.transpose(Image.FLIP_LEFT_RIGHT)
 
+    # Pra-pemrosesan letterbox bujur sangkar
+    inp_global = letterbox_to_square(img_pil) if use_letterbox else img_pil
+    inp_crop = letterbox_to_square(floor_crop) if use_letterbox else floor_crop
+    inp_flip = letterbox_to_square(flip_img) if use_letterbox else flip_img
+
     # Forward pass batch 3 citra sekaligus dalam 1 panggilan (hemat overhead komputasi)
     try:
         batch_results = model.predict(
-            source=[img_pil, floor_crop, flip_img],
+            source=[inp_global, inp_crop, inp_flip],
             verbose=False,
             device="cpu",
             imgsz=img_size,
@@ -165,7 +229,13 @@ def predict_ensemble(
         p_flip = {names[i].upper(): float(batch_results[2].probs.data[i]) for i in range(len(names))}
     except Exception:
         # Fallback aman jika terjadi kendala batch
-        fallback = predict_single(model, img_pil, img_size=img_size)
+        fallback = predict_single(
+            model,
+            img_pil,
+            img_size=img_size,
+            use_letterbox=use_letterbox,
+            confidence_threshold=confidence_threshold,
+        )
         return fallback
 
     # Soft voting ensemble terbobot
@@ -185,12 +255,21 @@ def predict_ensemble(
     top_label = max(p_ens, key=p_ens.get)  # type: ignore[arg-type]
     top_conf = p_ens[top_label]
 
-    annotated_bgr = draw_detection_overlay(frame_bgr, {"label": top_label, "confidence": top_conf}, roi_top_ratio=roi_top_ratio)
+    is_confident = bool(top_conf >= confidence_threshold)
+    final_label = top_label if is_confident else CONFIDENCE_UNCERTAIN_LABEL
+
+    annotated_bgr = draw_detection_overlay(
+        frame_bgr,
+        {"label": final_label, "confidence": top_conf},
+        roi_top_ratio=roi_top_ratio,
+    )
     annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
 
     return {
-        "label": top_label,
+        "label": final_label,
+        "raw_label": top_label,
         "confidence": top_conf,
+        "is_confident": is_confident,
         "probs": p_ens,
         "mode": "ensemble",
         "frame_bgr": frame_bgr,
@@ -244,6 +323,10 @@ def draw_detection_overlay(
         banner_color = (0, 200, 0)  # Green
         status_text = f"STATUS: RAPI ({conf*100:.1f}%)"
         sub_text = "Sandal/sepatu tertata rapi di rak / teratur berdampingan"
+    elif label == "RAGU":
+        banner_color = (0, 165, 255)  # Amber / Orange
+        status_text = f"STATUS: RAGU-RAGU ({conf*100:.1f}%)"
+        sub_text = "Keyakinan di bawah ambang batas (Audio peringatan dijeda)"
     else:
         banner_color = (220, 140, 20)  # Blue-cyan (BGR)
         status_text = f"STATUS: KOSONG / STANDBY ({conf*100:.1f}%)"

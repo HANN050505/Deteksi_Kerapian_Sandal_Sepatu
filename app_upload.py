@@ -205,6 +205,9 @@ def render_prediction_card(image_obj, name, pred):
         elif label == "KOSONG":
             st.info(f"🟦 **STATUS KEPUTUSAN: KOSONG / STANDBY** ({conf_pct:.1f}%)")
             st.markdown("> 🧹 *Lantai bersih / tidak ada sandal di depan pintu masuk lab. Mode standby.*")
+        elif label == "RAGU":
+            st.warning(f"⚠️ **STATUS KEPUTUSAN: RAGU-RAGU** ({conf_pct:.1f}%)")
+            st.markdown("> ⏸️ *Tingkat keyakinan model di bawah ambang batas (70%). Peringatan suara dijeda untuk menghindari false alarm.*")
         else:
             st.success(f"✅ **STATUS KEPUTUSAN: RAPI** ({conf_pct:.1f}%)")
             st.markdown(f"> 👍 *Sandal/sepatu tertata rapi di rak / berdampingan teratur.*")
@@ -507,6 +510,8 @@ with tab_live:
                                 st.error(f"🚨 **BERANTAKAN** ({cnf:.1f}%)")
                             elif lbl == "RAPI":
                                 st.success(f"✅ **RAPI** ({cnf:.1f}%)")
+                            elif lbl == "RAGU":
+                                st.warning(f"⚠️ **RAGU-RAGU** ({cnf:.1f}%)")
                             else:
                                 st.info(f"🟦 **KOSONG / STANDBY** ({cnf:.1f}%)")
 
