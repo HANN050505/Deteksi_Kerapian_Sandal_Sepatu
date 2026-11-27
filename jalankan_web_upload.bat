@@ -8,17 +8,6 @@ echo.
 
 cd /d "%~dp0"
 
-if exist "%LOCALAPPDATA%\Programs\Python\Python39\python.exe" (
-    set "PY_EXE=%LOCALAPPDATA%\Programs\Python\Python39\python.exe"
-) else (
-    where py >nul 2>&1
-    if %errorlevel% equ 0 (
-        set "PY_EXE=py -3"
-    ) else (
-        set "PY_EXE=python"
-    )
-)
-
 echo [1/2] Menyiapkan pembukaan browser otomatis ke http://localhost:8501 ...
 start "" cmd /c "ping 127.0.0.1 -n 3 >nul & start http://localhost:8501"
 
@@ -33,6 +22,15 @@ echo.
 echo * Catatan: Tekan Ctrl+C di terminal ini jika ingin menghentikan aplikasi.
 echo.
 
-%PY_EXE% -m streamlit run app_upload.py --server.address 0.0.0.0 --server.port 8501 --server.headless true --browser.gatherUsageStats false
+if exist "%LOCALAPPDATA%\Programs\Python\Python39\python.exe" (
+    "%LOCALAPPDATA%\Programs\Python\Python39\python.exe" -m streamlit run app_upload.py --server.address 0.0.0.0 --server.port 8501 --server.headless true --browser.gatherUsageStats false
+) else (
+    where py >nul 2>&1
+    if %errorlevel% equ 0 (
+        py -3.9 -m streamlit run app_upload.py --server.address 0.0.0.0 --server.port 8501 --server.headless true --browser.gatherUsageStats false
+    ) else (
+        python -m streamlit run app_upload.py --server.address 0.0.0.0 --server.port 8501 --server.headless true --browser.gatherUsageStats false
+    )
+)
 
 pause
