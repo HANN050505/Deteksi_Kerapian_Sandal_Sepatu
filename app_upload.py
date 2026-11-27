@@ -2,14 +2,22 @@ import sys
 import os
 import subprocess
 
-# Auto-launch dengan Python 3.9 jika script dipanggil langsung
+# Auto-launch dengan Streamlit jika script dipanggil langsung via Python
 if __name__ == '__main__':
     try:
         import streamlit.runtime
         if not streamlit.runtime.exists():
-            py39 = r"C:\Users\Raihan aryanova\AppData\Local\Programs\Python\Python39\python.exe"
-            py_exe = py39 if os.path.exists(py39) else sys.executable
-            cmd = [py_exe, "-m", "streamlit", "run", os.path.abspath(__file__), "--server.address", "0.0.0.0", "--server.maxUploadSize", "10"]
+            cmd = [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                os.path.abspath(__file__),
+                "--server.address",
+                "127.0.0.1",
+                "--server.maxUploadSize",
+                "10"
+            ]
             subprocess.run(cmd)
             sys.exit(0)
     except Exception:
@@ -22,11 +30,6 @@ import threading
 from PIL import Image
 import streamlit as st
 import numpy as np
-import torch
-from ultralytics import YOLO
-
-# Batasi thread CPU PyTorch agar komputer tetap dingin, cepat, dan tidak lag
-torch.set_num_threads(2)
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
@@ -36,8 +39,18 @@ try:
 except Exception:
     pass
 
-# Lock untuk thread safety model YOLO
-MODEL_LOCK = threading.Lock()
+# Import modul inti terpusat
+from core import (
+    MotionSettlementWatcher,
+    load_model as core_load_model,
+    predict_ensemble as core_predict_ensemble,
+    draw_detection_overlay,
+    FLOOR_ROI_TOP_RATIO,
+    CLASSES,
+    DEFAULT_AUDIO_PATH,
+    DEFAULT_MODEL_PATH,
+    BASE_DIR as CORE_BASE_DIR,
+)
 
 class FreshFrameCapture:
     """Threaded capture ultra-ringan untuk membuang buffer lag pada webcam dan kamera HP."""
@@ -86,79 +99,9 @@ class FreshFrameCapture:
         self.running = False
         self.cap.release()
 
-class MotionSettlementWatcher:
-    """
-    Detektor Pergerakan Cerdas Ultra-Ringan:
-    - Memproses area lantai beresolusi mini (240x160) sehingga komputasi < 0.2 ms (0% beban CPU).
-    - Mengetahui saat seseorang sedang meletakkan sandal.
-    - Hanya memicu evaluasi setelah orang selesai menata dan menjauh (kondisi tenang stabil).
-    """
-    def __init__(self, settle_sec=1.8, motion_thresh=0.025, cooldown_sec=10.0):
-        self.settle_sec = settle_sec
-        self.motion_thresh = motion_thresh
-        self.cooldown_sec = cooldown_sec
-        self.prev_gray = None
-        self.state = "STANDBY"
-        self.last_motion_time = 0.0
-        self.motion_start_time = 0.0
-        self.last_trigger_time = 0.0
-        self.activity_detected = False
-        self.motion_score = 0.0
-
-    def update(self, frame_bgr):
-        now = time.time()
-        h, w = frame_bgr.shape[:2]
-        
-        # Ambil area lantai (60% area bawah) lalu downscale ke 240x160 agar super enteng
-        roi = frame_bgr[int(h * 0.40):, :]
-        small = cv2.resize(roi, (240, 160), interpolation=cv2.INTER_NEAREST)
-        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (15, 15), 0)
-
-        if self.prev_gray is None:
-            self.prev_gray = gray.copy()
-            return "STANDBY", False, 0.0
-
-        diff = cv2.absdiff(self.prev_gray, gray)
-        _, thresh = cv2.threshold(diff, 28, 255, cv2.THRESH_BINARY)
-        motion_score = np.count_nonzero(thresh) / float(thresh.size)
-        self.motion_score = motion_score
-
-        self.prev_gray = gray.copy()
-
-        # Cooldown period
-        if self.state == "COOLDOWN":
-            if now - self.last_trigger_time >= self.cooldown_sec:
-                self.state = "STANDBY"
-                self.activity_detected = False
-            return "COOLDOWN", False, motion_score
-
-        is_moving = motion_score > self.motion_thresh
-
-        if is_moving:
-            self.last_motion_time = now
-            if not self.activity_detected:
-                self.activity_detected = True
-                self.motion_start_time = now
-            self.state = "PERSON_MOVING"
-            return "PERSON_MOVING", False, motion_score
-
-        if self.activity_detected:
-            if now - self.last_motion_time >= self.settle_sec:
-                # Orang selesai menaruh sandal & kondisi sudah stabil
-                self.activity_detected = False
-                self.state = "COOLDOWN"
-                self.last_trigger_time = now
-                return "TRIGGER_SNAPSHOT", True, motion_score
-            else:
-                self.state = "SETTLING"
-                return "SETTLING", False, motion_score
-
-        self.state = "STANDBY"
-        return "STANDBY", False, motion_score
-
-def play_alert_sound():
-    def _play():
+def play_alert_sound() -> None:
+    """Putar audio peringatan di thread terpisah agar tidak blocking UI."""
+    def _play() -> None:
         try:
             if os.path.exists(AUDIO_PATH):
                 if not pygame.mixer.get_init():
@@ -178,26 +121,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
-AUDIO_PATH = os.path.join(BASE_DIR, "audio", "peringatan.mp3")
-VAL_DIR = os.path.join(BASE_DIR, "dataset", "val")
-RUNS_DIR = os.path.join(BASE_DIR, "runs", "yolov8_sandal_v3")
+# Path dari core (satu sumber kebenaran)
+MODEL_PATH = DEFAULT_MODEL_PATH
+AUDIO_PATH = DEFAULT_AUDIO_PATH
+VAL_DIR    = os.path.join(CORE_BASE_DIR, "dataset", "val")
+RUNS_DIR   = os.path.join(CORE_BASE_DIR, "runs", "yolov8_sandal_v3")
 
 @st.cache_resource
 def load_model():
-    if not os.path.exists(MODEL_PATH):
-        st.error(f"File model tidak ditemukan di `{MODEL_PATH}`")
-        return None
-    yolo = YOLO(MODEL_PATH)
-    # Warmup satu kali di background agar PyTorch backend terinisialisasi
-    with MODEL_LOCK:
-        try:
-            dummy = np.zeros((224, 224, 3), dtype=np.uint8)
-            yolo.predict(source=dummy, verbose=False, device='cpu', imgsz=224)
-        except Exception:
-            pass
-    return yolo
+    """Muat model YOLO via modul core (dengan warmup)."""
+    return core_load_model(MODEL_PATH)
 
 model = load_model()
 
@@ -239,102 +172,12 @@ tab_upload, tab_live, tab_samples, tab_metrics = st.tabs([
 
 def predict_ensemble(img_pil_or_bgr):
     """
-    Multi-Scale Spatial Deep Learning Ensemble (High Performance Batch Mode):
-    Mengevaluasi 3 perspektif sekaligus dalam 1 batch forward pass:
-    1. Global Context (50%)
-    2. Floor Focus Crop (35%)
-    3. Flip TTA (15%)
+    Multi-Scale Spatial Deep Learning Ensemble via modul core:
+    Mengevaluasi 3 perspektif (Global 50%, Floor Crop 35%, Flip TTA 15%).
     """
     if model is None:
         return None
-
-    if isinstance(img_pil_or_bgr, np.ndarray):
-        img_bgr = img_pil_or_bgr.copy()
-        img_pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-    else:
-        img_pil = img_pil_or_bgr.convert("RGB")
-        img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-
-    w, h = img_pil.size
-    crop_top = int(h * 0.35)
-    floor_crop = img_pil.crop((0, crop_top, w, h))
-    flip_img = img_pil.transpose(Image.FLIP_LEFT_RIGHT)
-
-    with MODEL_LOCK:
-        try:
-            # Jalankan 3 perspektif sekaligus dalam 1 batch (hemat waktu komputasi 60%)
-            batch_results = model.predict(source=[img_pil, floor_crop, flip_img], verbose=False, device='cpu', imgsz=224)
-            names = batch_results[0].names
-
-            res1, res2, res3 = batch_results[0], batch_results[1], batch_results[2]
-            p_global = {names[i].upper(): float(res1.probs.data[i]) for i in range(len(names))}
-            p_crop = {names[i].upper(): float(res2.probs.data[i]) for i in range(len(names))}
-            p_flip = {names[i].upper(): float(res3.probs.data[i]) for i in range(len(names))}
-        except Exception:
-            # Fallback jika terjadi kendala batch
-            res = model.predict(source=img_pil, verbose=False, device='cpu', imgsz=224)[0]
-            names = res.names
-            p_global = {names[i].upper(): float(res.probs.data[i]) for i in range(len(names))}
-            p_crop = p_global
-            p_flip = p_global
-
-    # Soft Voting Ensemble
-    classes = ["BERANTAKAN", "RAPI", "KOSONG"]
-    p_ens = {}
-    for c in classes:
-        p_ens[c] = (
-            0.50 * p_global.get(c, 0.0) +
-            0.35 * p_crop.get(c, 0.0) +
-            0.15 * p_flip.get(c, 0.0)
-        )
-
-    tot = sum(p_ens.values()) or 1.0
-    p_ens = {c: val / tot for c, val in p_ens.items()}
-
-    top_label = max(p_ens, key=p_ens.get)
-    top_conf = p_ens[top_label]
-
-    # Visualisasi bersih (Area ROI Lantai & Badge Keputusan)
-    annotated = img_bgr.copy()
-    roi_y = int(h * 0.35)
-    cv2.rectangle(annotated, (8, roi_y), (w - 8, h - 8), (255, 190, 0), 2)
-    cv2.putText(
-        annotated,
-        "ZONA PEMANTAUAN LANTAI / RAK SANDAL",
-        (15, roi_y - 10 if roi_y > 25 else roi_y + 25),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (255, 190, 0),
-        2,
-        cv2.LINE_AA
-    )
-
-    badge_bg = (0, 0, 220) if top_label == "BERANTAKAN" else ((0, 200, 0) if top_label == "RAPI" else (220, 140, 20))
-    cv2.rectangle(annotated, (8, 8), (min(w - 8, 430), 55), badge_bg, -1)
-    cv2.putText(
-        annotated,
-        f"STATUS: {top_label} ({top_conf*100:.1f}%)",
-        (18, 40),
-        cv2.FONT_HERSHEY_DUPLEX,
-        0.75,
-        (255, 255, 255),
-        2,
-        cv2.LINE_AA
-    )
-
-    annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-
-    return {
-        "label": top_label,
-        "confidence": top_conf,
-        "probs": p_ens,
-        "details": {
-            "global": p_global,
-            "floor_crop": p_crop,
-            "flip_tta": p_flip
-        },
-        "annotated_img": annotated_rgb
-    }
+    return core_predict_ensemble(model, img_pil_or_bgr)
 
 def render_prediction_card(image_obj, name, pred):
     col_img, col_res = st.columns([1.1, 1.2])
@@ -534,8 +377,12 @@ with tab_live:
                     annotated_frame = frame.copy()
 
                     # Batas panduan zona lantai
-                    roi_y = int(h_f * 0.35)
+                    roi_y = int(h_f * FLOOR_ROI_TOP_RATIO)
                     cv2.rectangle(annotated_frame, (5, roi_y), (w_f - 5, h_f - 5), (255, 180, 0), 1)
+
+                    banner_color = (180, 180, 40)
+                    status_title = "STANDBY: MEMANTAU AREA"
+                    status_sub = "Memantau area..."
 
                     is_event_mode = "Event-Driven" in eval_mode
 

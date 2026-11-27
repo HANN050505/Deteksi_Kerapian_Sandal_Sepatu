@@ -34,8 +34,15 @@ $RECYCLE.BIN/
 temp_*/
 *.tmp
 
+# Archives and temporary files
+*.zip
+*.tar.gz
+
 # Large runs & model backups (keep models/best.pt only)
 models/*backup*.pt
 runs/yolov8_sandal/
 runs/yolov8_sandal_v2/
+runs/*/weights/
+runs/**/weights/
+
 

@@ -127,5 +127,14 @@ python diagnostik_prototype.py
 
 ---
 
+## 🔒 Catatan Keamanan Jaringan & Privasi
+
+1. **Akses Jaringan Web Streamlit**:
+   Skrip peluncur `jalankan_web_upload.bat` secara default berjalan pada host lokal `127.0.0.1` demi keamanan. Menjalankan Streamlit dengan `--server.address 0.0.0.0` membuka akses antarmuka ke seluruh jaringan lokal tanpa autentikasi bawaan. Gunakan opsi tersebut secara sadar hanya di jaringan tepercaya.
+2. **Privasi Penggunaan Kamera**:
+   Kamera pemantau diarahkan khusus pada area lantai/rak alas kaki di depan pintu masuk. Pastikan pemasangan kamera di lingkungan publik telah memperoleh izin pengelola fasilitas serta tidak menyorot wajah atau aktivitas pribadi pengguna.
+
+---
+
 ## 📖 Business & Data Understanding
 Penjelasan lengkap mengenai latar belakang masalah, tujuan bisnis, metrik KPI, distribusi dataset, serta analisis kualitas data dapat dibaca pada file [BUSINESS_AND_DATA_UNDERSTANDING.md](BUSINESS_AND_DATA_UNDERSTANDING.md).
