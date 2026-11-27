@@ -44,9 +44,7 @@ dataset_group_split/
 
 # Large runs & model backups (keep models/best.pt only)
 models/*backup*.pt
-runs/yolov8_sandal/
-runs/yolov8_sandal_v2/
-runs/*/weights/
-runs/**/weights/
+runs/
+yolov8n-cls.pt
 
 

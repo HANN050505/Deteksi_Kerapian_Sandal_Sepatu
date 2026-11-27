@@ -1,23 +1,25 @@
+"""
+Modul utilitas untuk menggabungkan citra dari folder eksternal ke dalam dataset berformat YOLOv8-cls.
+Mendukung argumen CLI fleksibel untuk direktori sumber citra baru dan direktori dataset tujuan.
+"""
+from __future__ import annotations
+
+import argparse
 import os
-import shutil
+from pathlib import Path
 import random
+import shutil
+from typing import Dict, List, Tuple
 from PIL import Image
 
-random.seed(42)
+from core.config import BASE_DIR, DATASET_DIR
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_DIR = os.path.join(BASE_DIR, "dataset")
-BACKUP_DIR = os.path.join(BASE_DIR, "dataset_backup_v1")
-DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
-NEW_DIRS = {
-    "BERANTAKAN": os.path.join(DOWNLOADS_DIR, "berantakan-20261110T065157Z-1-001", "berantakan"),
-    "RAPI": os.path.join(DOWNLOADS_DIR, "rapi-20261110T065157Z-1-001", "rapi")
-}
-
-def is_valid_image(filepath):
-    valid_exts = ('.jpg', '.jpeg', '.png', '.webp')
-    if not filepath.lower().endswith(valid_exts):
+def is_valid_image(filepath: str | Path) -> bool:
+    """Memverifikasi integritas file citra."""
+    valid_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
+    filepath_str = str(filepath).lower()
+    if not filepath_str.endswith(valid_exts):
         return False
     try:
         with Image.open(filepath) as img:
@@ -26,106 +28,115 @@ def is_valid_image(filepath):
     except Exception:
         return False
 
-def collect_existing(cls_name):
-    files = []
-    for split in ['train', 'val']:
-        folder = os.path.join(BACKUP_DIR, split, cls_name)
-        if os.path.exists(folder):
-            for f in os.listdir(folder):
-                full_path = os.path.join(folder, f)
-                if os.path.isfile(full_path) and is_valid_image(full_path):
-                    files.append(full_path)
-    return files
 
-def collect_new(cls_name):
-    folder = NEW_DIRS[cls_name]
-    files = []
-    if os.path.exists(folder):
-        for root, _, filenames in os.walk(folder):
-            for f in filenames:
-                full_path = os.path.join(root, f)
-                if os.path.isfile(full_path) and is_valid_image(full_path):
-                    files.append(full_path)
-    return files
+def collect_images_from_dir(folder: str | Path) -> List[Path]:
+    """Mengumpulkan seluruh file citra valid dari sebuah folder (rekursif)."""
+    p = Path(folder)
+    if not p.exists():
+        return []
+    valid_files: List[Path] = []
+    for root, _, filenames in os.walk(p):
+        for f in filenames:
+            file_path = Path(root) / f
+            if is_valid_image(file_path):
+                valid_files.append(file_path)
+    return sorted(valid_files)
 
-def run_merge_and_split():
-    print("=" * 60)
-    print("  PENGGABUNGAN DATASET LAMA & BARU + STRATIFIED SPLIT")
-    print("=" * 60)
 
-    # 1. Backup existing dataset if backup doesn't exist
-    if not os.path.exists(BACKUP_DIR):
-        print(f"Membuat cadangan dataset lama ke: {BACKUP_DIR} ...")
-        shutil.copytree(DATASET_DIR, BACKUP_DIR)
-        print("Cadangan berhasil dibuat!")
-    else:
-        print(f"Cadangan dataset lama sudah ada di: {BACKUP_DIR}")
+def merge_and_split(
+    new_berantakan_dir: str | Path | None = None,
+    new_rapi_dir: str | Path | None = None,
+    target_dataset_dir: str | Path = DATASET_DIR,
+    backup_existing: bool = True,
+    train_ratio: float = 0.8,
+    seed: int = 42,
+) -> None:
+    """Menggabungkan citra baru dan melakukan stratified split ke direktori target."""
+    random.seed(seed)
+    target_path = Path(target_dataset_dir).resolve()
+    backup_path = target_path.parent / f"{target_path.name}_backup_merge"
 
-    # 2. Collect all images per class
-    all_data = {}
-    for cls in ["BERANTAKAN", "RAPI"]:
-        old_imgs = collect_existing(cls)
-        new_imgs = collect_new(cls)
-        print(f"[{cls}] Gambar Lama: {len(old_imgs)} | Gambar Baru: {len(new_imgs)} | Total: {len(old_imgs) + len(new_imgs)}")
-        
-        items = []
-        for i, p in enumerate(old_imgs):
-            items.append((p, f"old_{cls.lower()}_{i:03d}_{os.path.basename(p)}"))
-        for i, p in enumerate(new_imgs):
-            items.append((p, f"new_{cls.lower()}_{i:03d}_{os.path.basename(p)}"))
-            
-        random.shuffle(items)
-        all_data[cls] = items
+    print("=" * 65)
+    print("  UTILITAS PENGGABUNGAN DATASET BERANTAKAN & RAPI")
+    print("=" * 65)
+    print(f"Direktori Target Dataset: {target_path}")
 
-    # 3. Clean target train/val directories
-    for split in ['train', 'val']:
-        for cls in ["BERANTAKAN", "RAPI"]:
-            target_folder = os.path.join(DATASET_DIR, split, cls)
-            if os.path.exists(target_folder):
-                shutil.rmtree(target_folder)
-            os.makedirs(target_folder, exist_ok=True)
+    new_dirs = {
+        "BERANTAKAN": Path(new_berantakan_dir).resolve() if new_berantakan_dir else None,
+        "RAPI": Path(new_rapi_dir).resolve() if new_rapi_dir else None,
+    }
 
-    # Clean old cache files
-    for cache_f in ['train.cache', 'val.cache']:
-        cp = os.path.join(DATASET_DIR, cache_f)
-        if os.path.exists(cp):
-            os.remove(cp)
+    # Validasi direktori sumber
+    for cls_name, p in new_dirs.items():
+        if p is None or not p.exists():
+            print(f"[CATATAN] Folder sumber untuk kelas '{cls_name}' tidak ditentukan atau tidak ada: {p}")
+            print(f"Gunakan argumen --berantakan dan --rapi untuk menentukan folder sumber citra baru.")
+            return
 
-    # 4. Copy with 80% train / 20% val split
-    stats = {}
-    for cls, items in all_data.items():
-        total = len(items)
-        split_idx = int(total * 0.8)
-        train_items = items[:split_idx]
-        val_items = items[split_idx:]
-        
-        train_dir = os.path.join(DATASET_DIR, 'train', cls)
-        val_dir = os.path.join(DATASET_DIR, 'val', cls)
-        
-        for src, name in train_items:
-            shutil.copy2(src, os.path.join(train_dir, name))
-            
-        for src, name in val_items:
-            shutil.copy2(src, os.path.join(val_dir, name))
-            
-        stats[cls] = {
-            "total": total,
-            "train": len(train_items),
-            "val": len(val_items)
+    # Backup dataset lama bila ada
+    if backup_existing and target_path.exists():
+        if not backup_path.exists():
+            print(f"Membuat cadangan dataset ke: {backup_path} ...")
+            shutil.copytree(target_path, backup_path)
+            print("Cadangan berhasil dibuat.")
+
+    # Kumpulkan citra baru
+    stats: Dict[str, Dict[str, int]] = {}
+    for cls_name, folder in new_dirs.items():
+        files = collect_images_from_dir(folder)
+        print(f"[{cls_name}] Ditemukan {len(files)} citra valid dari: {folder}")
+        if not files:
+            print(f"[PERINGATAN] Tidak ada citra yang ditemukan untuk kelas {cls_name}.")
+            continue
+
+        shuffled = list(files)
+        random.shuffle(shuffled)
+        split_idx = int(len(shuffled) * train_ratio)
+        train_files = shuffled[:split_idx]
+        val_files = shuffled[split_idx:]
+
+        train_dst = target_path / "train" / cls_name
+        val_dst = target_path / "val" / cls_name
+        train_dst.mkdir(parents=True, exist_ok=True)
+        val_dst.mkdir(parents=True, exist_ok=True)
+
+        for i, src in enumerate(train_files):
+            dst = train_dst / f"new_{cls_name.lower()}_{i:04d}_{src.name}"
+            shutil.copy2(src, dst)
+
+        for i, src in enumerate(val_files):
+            dst = val_dst / f"new_{cls_name.lower()}_{i:04d}_{src.name}"
+            shutil.copy2(src, dst)
+
+        stats[cls_name] = {
+            "total": len(shuffled),
+            "train": len(train_files),
+            "val": len(val_files),
         }
 
-    print("\n" + "=" * 60)
-    print("  DISTRIBUSI DATASET FINAL HASIL PENGGABUNGAN")
-    print("=" * 60)
-    total_train = sum(s['train'] for s in stats.values())
-    total_val = sum(s['val'] for s in stats.values())
-    total_all = sum(s['total'] for s in stats.values())
-    
-    for cls, s in stats.items():
-        pct = (s['total'] / total_all) * 100
-        print(f" - {cls:12s}: Total {s['total']:3d} ({pct:.1f}%) -> Train: {s['train']:3d}, Val: {s['val']:2d}")
-    print(f"Total Keseluruhan : {total_all} gambar (Train: {total_train}, Val: {total_val})")
-    print("=" * 60)
+    print("\n" + "=" * 65)
+    print("  RINGKASAN HASIL PENGGABUNGAN DATASET")
+    print("=" * 65)
+    for cls_name, s in stats.items():
+        print(f" - {cls_name:12s}: Total {s['total']:3d} -> Train: {s['train']:3d}, Val: {s['val']:2d}")
+    print("=" * 65)
+
 
 if __name__ == "__main__":
-    run_merge_and_split()
+    parser = argparse.ArgumentParser(description="Penggabungan citra baru ke dataset YOLOv8-cls")
+    parser.add_argument("--berantakan", type=str, default=None, help="Folder sumber citra BERANTAKAN")
+    parser.add_argument("--rapi", type=str, default=None, help="Folder sumber citra RAPI")
+    parser.add_argument("--target", type=str, default=str(DATASET_DIR), help="Folder target dataset")
+    parser.add_argument("--train-ratio", type=float, default=0.8, help="Proporsi data training (default: 0.8)")
+    parser.add_argument("--seed", type=int, default=42, help="Seed generator acak")
+    parser.add_argument("--no-backup", action="store_true", help="Jangan buat folder backup")
+
+    args = parser.parse_args()
+    merge_and_split(
+        new_berantakan_dir=args.berantakan,
+        new_rapi_dir=args.rapi,
+        target_dataset_dir=args.target,
+        backup_existing=not args.no_backup,
+        train_ratio=args.train_ratio,
+        seed=args.seed,
+    )

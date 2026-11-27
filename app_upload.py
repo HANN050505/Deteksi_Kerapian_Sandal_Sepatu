@@ -546,13 +546,23 @@ with tab_live:
                 else:
                     st.info(f"🟦 Kosong ({snap['conf']*100:.1f}%)")
 
-# TAB 3: UJI CONTOH DARI DATASET VALIDASI
+# TAB 3: UJI CONTOH DARI DATASET TEST / VALIDASI
 with tab_samples:
-    st.subheader("🧪 Uji Sampel dari Dataset Validasi (3 Kelas)")
-    st.write("Pilih salah satu gambar dari folder validasi untuk langsung melihat hasil deteksi dan interpretasi model:")
+    st.subheader("🧪 Uji Sampel dari Dataset (3 Kelas)")
+    st.write("Pilih salah satu gambar dari dataset untuk langsung menguji hasil inferensi model ensemble:")
 
-    category = st.radio("Pilih Kategori Sampel:", ["BERANTAKAN", "RAPI", "KOSONG"], horizontal=True)
-    cat_dir = os.path.join(VAL_DIR, category)
+    col_split, col_cat = st.columns([1, 1])
+    with col_split:
+        selected_split = st.selectbox(
+            "Pilih Himpunan Data (Split):",
+            ["test (Test Set Independen)", "val (Validation Set)"],
+            index=0
+        )
+    with col_cat:
+        category = st.radio("Pilih Kategori Sampel:", ["BERANTAKAN", "RAPI", "KOSONG"], horizontal=True)
+
+    split_dir_name = "test" if "test" in selected_split else "val"
+    cat_dir = os.path.join(CORE_BASE_DIR, "dataset", split_dir_name, category)
 
     if os.path.exists(cat_dir):
         file_list = [f for f in sorted(os.listdir(cat_dir)) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp'))]
@@ -567,7 +577,7 @@ with tab_samples:
         else:
             st.warning("Tidak ditemukan file gambar pada folder kategori tersebut.")
     else:
-        st.error(f"Folder validasi tidak ditemukan di `{cat_dir}`")
+        st.error(f"Folder dataset tidak ditemukan di `{cat_dir}`")
 
 # TAB 4: METRIK MODEL & EVALUASI
 with tab_metrics:

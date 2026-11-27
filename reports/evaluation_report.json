@@ -1,22 +1,22 @@
 {
   "dataset_split": "test",
-  "dataset_path": "D:\\deteksi_sandal\\dataset_group_split",
+  "dataset_path": "D:\\deteksi_sandal\\dataset",
   "total_samples": 68,
   "confidence_threshold": 0.7,
-  "evaluation_timestamp": "2026-11-27 16:09:18",
+  "evaluation_timestamp": "2026-11-27 17:43:16",
   "comparison": {
     "single": {
-      "accuracy": 0.9706,
+      "accuracy": 0.9559,
       "accuracy_ci_95": [
-        0.899,
-        0.9919
+        0.8781,
+        0.9849
       ],
-      "correct_count": 66,
+      "correct_count": 65,
       "total_count": 68,
       "false_alarm_rate": 0.087,
       "false_alarm_count": 2,
       "total_true_rapi": 23,
-      "macro_f1": 0.9725,
+      "macro_f1": 0.9559,
       "class_metrics": {
         "BERANTAKAN": {
           "precision": 0.9286,
@@ -26,14 +26,14 @@
         },
         "RAPI": {
           "precision": 1.0,
-          "recall": 0.913,
-          "f1_score": 0.9545,
+          "recall": 0.8696,
+          "f1_score": 0.9302,
           "support": 23
         },
         "KOSONG": {
-          "precision": 1.0,
+          "precision": 0.95,
           "recall": 1.0,
-          "f1_score": 1.0,
+          "f1_score": 0.9744,
           "support": 19
         }
       },
@@ -45,8 +45,8 @@
         },
         "RAPI": {
           "BERANTAKAN": 2,
-          "RAPI": 21,
-          "KOSONG": 0
+          "RAPI": 20,
+          "KOSONG": 1
         },
         "KOSONG": {
           "BERANTAKAN": 0,
@@ -106,17 +106,17 @@
       }
     },
     "ensemble_threshold": {
-      "accuracy": 0.9118,
+      "accuracy": 0.9559,
       "accuracy_ci_95": [
-        0.8206,
-        0.9589
+        0.8781,
+        0.9849
       ],
-      "correct_count": 62,
+      "correct_count": 65,
       "total_count": 68,
       "false_alarm_rate": 0.0435,
       "false_alarm_count": 1,
       "total_true_rapi": 23,
-      "macro_f1": 0.9437,
+      "macro_f1": 0.9619,
       "class_metrics": {
         "BERANTAKAN": {
           "precision": 0.963,
@@ -126,14 +126,14 @@
         },
         "RAPI": {
           "precision": 1.0,
-          "recall": 0.7391,
-          "f1_score": 0.85,
+          "recall": 0.8696,
+          "f1_score": 0.9302,
           "support": 23
         },
         "KOSONG": {
-          "precision": 1.0,
+          "precision": 0.95,
           "recall": 1.0,
-          "f1_score": 1.0,
+          "f1_score": 0.9744,
           "support": 19
         }
       },
@@ -146,9 +146,9 @@
         },
         "RAPI": {
           "BERANTAKAN": 1,
-          "RAPI": 17,
-          "KOSONG": 0,
-          "RAGU": 5
+          "RAPI": 20,
+          "KOSONG": 1,
+          "RAGU": 1
         },
         "KOSONG": {
           "BERANTAKAN": 0,
