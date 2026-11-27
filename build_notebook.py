@@ -63,6 +63,18 @@ plt.rcParams['figure.figsize'] = (10, 6)
 plt.rcParams['font.size'] = 11
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+
+# Deteksi lingkungan eksekusi (Local vs Google Colab)
+if 'google.colab' in sys.modules:
+    repo_dir = "/content/Deteksi_Kerapian_Sandal_Sepatu"
+    if not os.path.exists("dataset") and not os.path.exists(repo_dir):
+        print("🚀 Terdeteksi Google Colab: Mengunduh repositori proyek...")
+        import subprocess
+        subprocess.run(["git", "clone", "https://github.com/HANN050505/Deteksi_Kerapian_Sandal_Sepatu.git", repo_dir])
+    if os.path.exists(repo_dir) and not os.path.exists("dataset"):
+        os.chdir(repo_dir)
+        BASE_DIR = repo_dir
+
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 TRAINING_DIR = os.path.join(BASE_DIR, "reports", "training")
 RUNS_DIR = TRAINING_DIR if os.path.exists(TRAINING_DIR) else os.path.join(BASE_DIR, "runs", "yolov8_sandal_group_split")
@@ -293,8 +305,13 @@ Pada tahap ini, seluruh citra dalam dataset proyek akan diekstraksi metadatanya 
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.1 PEMUATAN DATA OTOMATIS & EKSTRAKSI METADATA CITRA
 records = []
+META_COLUMNS = [
+    'Filename', 'Filepath', 'Split', 'Class', 'Width', 'Height',
+    'Aspect_Ratio', 'MegaPixels', 'FileSize_KB', 'Brightness',
+    'Contrast', 'Red_Mean', 'Green_Mean', 'Blue_Mean'
+]
 
-for split in ['train', 'val']:
+for split in ['train', 'val', 'test']:
     split_dir = os.path.join(DATASET_DIR, split)
     if not os.path.exists(split_dir):
         continue
@@ -303,7 +320,7 @@ for split in ['train', 'val']:
         if not os.path.exists(cls_dir):
             continue
         for fname in os.listdir(cls_dir):
-            if fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+            if fname.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp')):
                 fpath = os.path.join(cls_dir, fname)
                 fsize_kb = os.path.getsize(fpath) / 1024.0
                 
@@ -337,43 +354,51 @@ for split in ['train', 'val']:
                         'Blue_Mean': round(b_mean, 2)
                     })
 
-df_meta = pd.DataFrame(records)
+df_meta = pd.DataFrame(records, columns=META_COLUMNS)
 print(f"Total Citra Berhasil Diindeks: {len(df_meta)} gambar")
-display(df_meta.head(6))
+if len(df_meta) == 0:
+    print(f"⚠️ PERINGATAN: Folder dataset '{DATASET_DIR}' tidak memiliki citra atau belum tersedia.")
+    print("Jika berjalan di Colab, pastikan repositori telah di-clone atau folder dataset telah diunggah.")
+else:
+    display(df_meta.head(6))
 """))
 
 # ==========================================
 # 9. CLASS DISTRIBUTION & BALANCE (CODE)
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.2 ANALISIS DISTRIBUSI KELAS & KESEIMBANGAN DATASET
-# Periksa tabel kontinjensi Train vs Validation
-summary_table = pd.crosstab(df_meta['Split'], df_meta['Class'], margins=True)
-print("=== TABEL DISTRIBUSI DATASET ===")
-display(summary_table)
+if df_meta.empty or 'Split' not in df_meta.columns:
+    print("⚠️ Data metadata kosong. Lewati analisis kontinjensi.")
+else:
+    # Periksa tabel kontinjensi Train vs Validation vs Test
+    summary_table = pd.crosstab(df_meta['Split'], df_meta['Class'], margins=True)
+    print("=== TABEL DISTRIBUSI DATASET ===")
+    display(summary_table)
 
-# Visualisasi Bar Chart & Donut Chart
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    # Visualisasi Bar Chart & Donut Chart
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-# Plot 1: Split Distribution
-sns.countplot(data=df_meta, x='Split', hue='Class', palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, ax=ax1, edgecolor='black')
-ax1.set_title('Distribusi Kelas Berdasarkan Split (Train vs Val)', fontsize=12, fontweight='bold')
-ax1.set_xlabel('Dataset Split', fontsize=11)
-ax1.set_ylabel('Jumlah Gambar', fontsize=11)
+    # Plot 1: Split Distribution
+    palette = {'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}
+    sns.countplot(data=df_meta, x='Split', hue='Class', palette=palette, ax=ax1, edgecolor='black')
+    ax1.set_title('Distribusi Kelas Berdasarkan Split (Train, Val, Test)', fontsize=12, fontweight='bold')
+    ax1.set_xlabel('Dataset Split', fontsize=11)
+    ax1.set_ylabel('Jumlah Gambar', fontsize=11)
 
-# Plot 2: Proporsi Total Kelas (Donut Chart)
-class_counts = df_meta['Class'].value_counts()
-colors = [{'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}.get(c, '#95a5a6') for c in class_counts.index]
-ax2.pie(class_counts, labels=class_counts.index, autopct='%1.1f%%', startangle=90,
-        colors=colors, explode=[0.03]*len(class_counts),
-        wedgeprops=dict(width=0.45, edgecolor='black'))
-ax2.set_title('Proporsi Total Kelas Keseluruhan (3 Kelas)', fontsize=12, fontweight='bold')
+    # Plot 2: Proporsi Total Kelas (Donut Chart)
+    class_counts = df_meta['Class'].value_counts()
+    colors = [palette.get(c, '#95a5a6') for c in class_counts.index]
+    ax2.pie(class_counts, labels=class_counts.index, autopct='%1.1f%%', startangle=90,
+            colors=colors, explode=[0.03]*len(class_counts),
+            wedgeprops=dict(width=0.45, edgecolor='black'))
+    ax2.set_title('Proporsi Total Kelas Keseluruhan (3 Kelas)', fontsize=12, fontweight='bold')
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 
-# Verifikasi Rasio Keseimbangan
-for c_name, c_cnt in class_counts.items():
-    print(f"Rasio Kelas {c_name:<11} : {c_cnt} citra ({c_cnt / len(df_meta) * 100:.1f}%)")
+    # Verifikasi Rasio Keseimbangan
+    for c_name, c_cnt in class_counts.items():
+        print(f"Rasio Kelas {c_name:<11} : {c_cnt} citra ({c_cnt / len(df_meta) * 100:.1f}%)")
 print("Kesimpulan: Dataset memiliki keseimbangan kelas yang sangat ideal antar ketiga kelas.")
 """))
 
@@ -381,29 +406,32 @@ print("Kesimpulan: Dataset memiliki keseimbangan kelas yang sangat ideal antar k
 # 10. RESOLUTION & ASPECT RATIO (CODE)
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.3 ANALISIS RESOLUSI, UKURAN FILE & RASIO ASPEK
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+if df_meta.empty:
+    print("⚠️ Data metadata kosong. Lewati analisis resolusi.")
+else:
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-# Scatter plot Resolusi Width vs Height
-sns.scatterplot(data=df_meta, x='Width', y='Height', hue='Class',
-                palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, alpha=0.8, s=70, ax=ax1)
-# Garis target input YOLO (224x224)
-ax1.scatter([224], [224], color='blue', s=120, marker='X', label='YOLO Resize Target (224x224)')
-ax1.set_title('Sebaran Dimensi Citra Asli (Width vs Height)', fontsize=12, fontweight='bold')
-ax1.set_xlabel('Lebar / Width (Piksel)', fontsize=11)
-ax1.set_ylabel('Tinggi / Height (Piksel)', fontsize=11)
-ax1.legend()
+    # Scatter plot Resolusi Width vs Height
+    sns.scatterplot(data=df_meta, x='Width', y='Height', hue='Class',
+                    palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, alpha=0.8, s=70, ax=ax1)
+    # Garis target input YOLO (224x224)
+    ax1.scatter([224], [224], color='blue', s=120, marker='X', label='YOLO Resize Target (224x224)')
+    ax1.set_title('Sebaran Dimensi Citra Asli (Width vs Height)', fontsize=12, fontweight='bold')
+    ax1.set_xlabel('Lebar / Width (Piksel)', fontsize=11)
+    ax1.set_ylabel('Tinggi / Height (Piksel)', fontsize=11)
+    ax1.legend()
 
-# Distribusi Ukuran File (KB)
-sns.boxplot(data=df_meta, x='Class', y='FileSize_KB', palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, ax=ax2)
-ax2.set_title('Distribusi Ukuran File Citra (KB)', fontsize=12, fontweight='bold')
-ax2.set_xlabel('Kelas Target', fontsize=11)
-ax2.set_ylabel('Ukuran File (KB)', fontsize=11)
+    # Distribusi Ukuran File (KB)
+    sns.boxplot(data=df_meta, x='Class', y='FileSize_KB', palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, ax=ax2)
+    ax2.set_title('Distribusi Ukuran File Citra (KB)', fontsize=12, fontweight='bold')
+    ax2.set_xlabel('Kelas Target', fontsize=11)
+    ax2.set_ylabel('Ukuran File (KB)', fontsize=11)
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 
-print(f"Rata-rata Resolusi : {df_meta['Width'].mean():.0f} x {df_meta['Height'].mean():.0f} piksel")
-print(f"Rata-rata Rasio Aspek: {df_meta['Aspect_Ratio'].mean():.2f}")
+    print(f"Rata-rata Resolusi : {df_meta['Width'].mean():.0f} x {df_meta['Height'].mean():.0f} piksel")
+    print(f"Rata-rata Rasio Aspek: {df_meta['Aspect_Ratio'].mean():.2f}")
 """))
 
 # ==========================================
@@ -411,34 +439,35 @@ print(f"Rata-rata Rasio Aspek: {df_meta['Aspect_Ratio'].mean():.2f}")
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.4 ANALISIS PENCAHAYAAN (BRIGHTNESS) & KONTRAS
 # Uji apakah terdapat bias pencahayaan antara gambar sandal Rapi vs Berantakan vs Kosong
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-# Plot Distribusi Kecerahan
-sns.kdeplot(data=df_meta, x='Brightness', hue='Class', fill=True,
-            palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, common_norm=False, ax=ax1)
-ax1.set_title('Distribusi Tingkat Kecerahan (Pixel Intensity 0-255)', fontsize=12, fontweight='bold')
-ax1.set_xlabel('Mean Brightness', fontsize=11)
-
-# Plot Distribusi Kontras
-sns.boxplot(data=df_meta, x='Class', y='Contrast', palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, ax=ax2)
-ax2.set_title('Distribusi Kontras (Standard Deviation)', fontsize=12, fontweight='bold')
-ax2.set_xlabel('Kelas Target', fontsize=11)
-
-plt.tight_layout()
-plt.show()
-
-# Uji Statistik Independen (Mann-Whitney U Test) untuk mengecek bias pencahayaan
-b_berantakan = df_meta[df_meta['Class'] == 'BERANTAKAN']['Brightness']
-b_rapi = df_meta[df_meta['Class'] == 'RAPI']['Brightness']
-stat, p_val = stats.mannwhitneyu(b_berantakan, b_rapi)
-
-print(f"Uji Statistik Mann-Whitney U Kecerahan: U-stat = {stat:.1f}, p-value = {p_val:.4f}")
-if p_val > 0.05:
-    print("✅ P-value > 0.05: Tidak ada perbedaan signifikan pada tingkat kecerahan antar kelas.")
-    print("Artinya: Model tidak belajar 'curang' berdasarkan terang/gelap foto, melainkan mempelajari pola penataan sandal secara objektif.")
+if df_meta.empty:
+    print("⚠️ Data metadata kosong. Lewati analisis pencahayaan.")
 else:
-    print("⚠️ Terdapat sedikit variasi pencahayaan antar kelas, penambahan augmentasi warna (HSV) sangat disarankan.")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Plot Distribusi Kecerahan
+    sns.kdeplot(data=df_meta, x='Brightness', hue='Class', fill=True,
+                palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, common_norm=False, ax=ax1)
+    ax1.set_title('Distribusi Tingkat Kecerahan (Pixel Intensity 0-255)', fontsize=12, fontweight='bold')
+    ax1.set_xlabel('Mean Brightness', fontsize=11)
+
+    # Plot Distribusi Kontras
+    sns.boxplot(data=df_meta, x='Class', y='Contrast', palette={'BERANTAKAN': '#e74c3c', 'RAPI': '#2ecc71', 'KOSONG': '#3498db'}, ax=ax2)
+    ax2.set_title('Distribusi Kontras (Standard Deviation)', fontsize=12, fontweight='bold')
+    ax2.set_xlabel('Kelas Target', fontsize=11)
+
+    plt.tight_layout()
+    plt.show()
+
+    # Uji Statistik Independen (Mann-Whitney U Test) untuk mengecek bias pencahayaan
+    b_berantakan = df_meta[df_meta['Class'] == 'BERANTAKAN']['Brightness']
+    b_rapi = df_meta[df_meta['Class'] == 'RAPI']['Brightness']
+    if len(b_berantakan) > 0 and len(b_rapi) > 0:
+        stat, p_val = stats.mannwhitneyu(b_berantakan, b_rapi)
+        print(f"Uji Statistik Mann-Whitney U Kecerahan: U-stat = {stat:.1f}, p-value = {p_val:.4f}")
+        if p_val > 0.05:
+            print("✅ P-value > 0.05: Tidak ada perbedaan signifikan pada tingkat kecerahan antar kelas.")
+        else:
+            print("⚠️ Terdapat sedikit variasi pencahayaan antar kelas, penambahan augmentasi warna (HSV) sangat disarankan.")
 """))
 
 # ==========================================
@@ -446,56 +475,63 @@ else:
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.5 VISUALISASI SAMPEL NYATA: SANDAL RAPI vs BERANTAKAN
 # Menampilkan sampel gambar langsung dari dataset dengan OpenCV
+if df_meta.empty:
+    print("⚠️ Data metadata kosong. Lewati visualisasi sampel citra.")
+else:
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 
-fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    for row_idx, cls_name in enumerate(['BERANTAKAN', 'RAPI']):
+        cls_subset = df_meta[df_meta['Class'] == cls_name]
+        n_sample = min(4, len(cls_subset))
+        if n_sample > 0:
+            samples = cls_subset.sample(n_sample, random_state=42)
+            for col_idx, (_, row) in enumerate(samples.iterrows()):
+                ax = axes[row_idx, col_idx]
+                img_bgr = cv2.imread(row['Filepath'])
+                if img_bgr is not None:
+                    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                    ax.imshow(img_rgb)
+                    ax.set_title(f"[{cls_name}]\\n{row['Width']}x{row['Height']} px\\nBright: {row['Brightness']}",
+                                 fontsize=9, fontweight='bold', color='red' if cls_name == 'BERANTAKAN' else 'green')
+                ax.axis('off')
 
-for row_idx, cls_name in enumerate(['BERANTAKAN', 'RAPI']):
-    samples = df_meta[df_meta['Class'] == cls_name].sample(4, random_state=42)
-    for col_idx, (_, row) in enumerate(samples.iterrows()):
-        ax = axes[row_idx, col_idx]
-        img_bgr = cv2.imread(row['Filepath'])
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        
-        ax.imshow(img_rgb)
-        ax.set_title(f"[{cls_name}]\\n{row['Width']}x{row['Height']} px\\nBright: {row['Brightness']}",
-                     fontsize=9, fontweight='bold', color='red' if cls_name == 'BERANTAKAN' else 'green')
-        ax.axis('off')
-
-plt.suptitle('Inspeksi Visual Sampel Nyata: BERANTAKAN (Atas) vs RAPI (Bawah)', fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.show()
+    plt.suptitle('Inspeksi Visual Sampel Nyata: BERANTAKAN (Atas) vs RAPI (Bawah)', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
 """))
 
 # ==========================================
 # 13. SPATIAL EDGE & CONTOUR INSPECTION (CODE)
 # ==========================================
 cells.append(nbf.v4.new_code_cell("""# 2.6 ANALISIS STRUKTUR SPASIAL & DETEKSI TEPI (EDGE FEATURE INSPECTION)
-# Menunjukkan bagaimana fitur tepi (edges) berbeda antara sandal tersusun rapi vs acak
+if df_meta.empty or len(df_meta[df_meta['Class'] == 'BERANTAKAN']) == 0 or len(df_meta[df_meta['Class'] == 'RAPI']) == 0:
+    print("⚠️ Sampel citra kelas BERANTAKAN atau RAPI tidak cukup untuk analisis deteksi tepi.")
+else:
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
-fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    sample_messy = df_meta[df_meta['Class'] == 'BERANTAKAN'].iloc[0]['Filepath']
+    sample_neat = df_meta[df_meta['Class'] == 'RAPI'].iloc[0]['Filepath']
 
-sample_messy = df_meta[df_meta['Class'] == 'BERANTAKAN'].iloc[0]['Filepath']
-sample_neat = df_meta[df_meta['Class'] == 'RAPI'].iloc[0]['Filepath']
+    for idx, (fpath, title, ax_orig, ax_edge) in enumerate([
+        (sample_messy, 'BERANTAKAN: Tepi Menyilang & Acak', axes[0, 0], axes[0, 1]),
+        (sample_neat, 'RAPI: Tepi Sejajar & Berpasangan', axes[1, 0], axes[1, 1])
+    ]):
+        img_bgr = cv2.imread(fpath)
+        if img_bgr is not None:
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, threshold1=80, threshold2=180)
+            
+            ax_orig.imshow(img_rgb)
+            ax_orig.set_title(f"Citra Asli: {title.split(':')[0]}", fontsize=11, fontweight='bold')
+            ax_orig.axis('off')
+            
+            ax_edge.imshow(edges, cmap='gray')
+            ax_edge.set_title(f"Deteksi Tepi: {title}", fontsize=11, fontweight='bold')
+            ax_edge.axis('off')
 
-for idx, (fpath, title, ax_orig, ax_edge) in enumerate([
-    (sample_messy, 'BERANTAKAN: Tepi Menyilang & Acak', axes[0, 0], axes[0, 1]),
-    (sample_neat, 'RAPI: Tepi Sejajar & Berpasangan', axes[1, 0], axes[1, 1])
-]):
-    img_bgr = cv2.imread(fpath)
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, threshold1=80, threshold2=180)
-    
-    ax_orig.imshow(img_rgb)
-    ax_orig.set_title(f"Citra Asli: {title.split(':')[0]}", fontsize=11, fontweight='bold')
-    ax_orig.axis('off')
-    
-    ax_edge.imshow(edges, cmap='gray')
-    ax_edge.set_title(f"Deteksi Tepi: {title}", fontsize=11, fontweight='bold')
-    ax_edge.axis('off')
-
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 """))
 
 # ==========================================
@@ -630,11 +666,13 @@ print(f"TOTAL NET BUSINESS VALUE GENERATED       : +{net_business_value:,} poin 
 cells.append(nbf.v4.new_code_cell("""# 3.3 PENGUJIAN INFERENSI INTERAKTIF PADA SAMPEL VALIDASI
 from ultralytics import YOLO
 
-if os.path.exists(MODEL_PATH):
+val_samples = df_meta[df_meta['Split'].isin(['val', 'test'])] if (not df_meta.empty and 'Split' in df_meta.columns) else pd.DataFrame()
+
+if os.path.exists(MODEL_PATH) and not val_samples.empty:
     model = YOLO(MODEL_PATH)
     
-    # Ambil 1 sampel validasi
-    test_img_path = df_meta[df_meta['Split'] == 'val'].iloc[0]['Filepath']
+    # Ambil 1 sampel evaluasi
+    test_img_path = val_samples.iloc[0]['Filepath']
     test_img = Image.open(test_img_path).convert('RGB')
     
     # Jalankan Prediksi
@@ -661,7 +699,7 @@ if os.path.exists(MODEL_PATH):
     plt.axis('off')
     plt.show()
 else:
-    print("Model best.pt tidak ditemukan.")
+    print("Model best.pt atau sampel dataset tidak ditemukan.")
 """))
 
 # ==========================================
