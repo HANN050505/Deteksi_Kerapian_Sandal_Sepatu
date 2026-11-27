@@ -33,3 +33,9 @@ $RECYCLE.BIN/
 # Temporary directories
 temp_*/
 *.tmp
+
+# Large runs & model backups (keep models/best.pt only)
+models/*backup*.pt
+runs/yolov8_sandal/
+runs/yolov8_sandal_v2/
+

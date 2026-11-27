@@ -5,12 +5,14 @@ from PIL import Image
 
 random.seed(42)
 
-DATASET_DIR = r"D:\deteksi_sandal\dataset"
-BACKUP_DIR = r"D:\deteksi_sandal\dataset_backup_v1"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_DIR = os.path.join(BASE_DIR, "dataset")
+BACKUP_DIR = os.path.join(BASE_DIR, "dataset_backup_v1")
+DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
 NEW_DIRS = {
-    "BERANTAKAN": r"C:\Users\Raihan aryanova\Downloads\berantakan-20261110T065157Z-1-001\berantakan",
-    "RAPI": r"C:\Users\Raihan aryanova\Downloads\rapi-20261110T065157Z-1-001\rapi"
+    "BERANTAKAN": os.path.join(DOWNLOADS_DIR, "berantakan-20261110T065157Z-1-001", "berantakan"),
+    "RAPI": os.path.join(DOWNLOADS_DIR, "rapi-20261110T065157Z-1-001", "rapi")
 }
 
 def is_valid_image(filepath):

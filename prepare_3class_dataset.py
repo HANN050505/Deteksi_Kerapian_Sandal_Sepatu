@@ -6,9 +6,10 @@ from PIL import Image, ImageEnhance
 
 random.seed(42)
 
-ZIP_PATH = r"C:\Users\Raihan aryanova\Downloads\Kosong.zip"
-DATASET_DIR = r"D:\deteksi_sandal\dataset"
-TEMP_DIR = r"D:\deteksi_sandal\temp_kosong"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_DIR = os.path.join(BASE_DIR, "dataset")
+TEMP_DIR = os.path.join(BASE_DIR, "temp_kosong")
+ZIP_PATH = os.path.join(os.path.expanduser("~"), "Downloads", "Kosong.zip")
 
 def extract_and_prepare():
     print("=" * 60)

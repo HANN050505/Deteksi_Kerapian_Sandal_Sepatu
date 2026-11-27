@@ -75,8 +75,8 @@ D:\deteksi_sandal\dataset\
 Total: 425 gambar
 ```
 
-- **Rasio Kelas**: Sangat seimbang (~56% vs 44%), sehingga model tidak mengalami bias mayoritas kelas (*class imbalance*).
-- **Stratifikasi**: Proporsi kelas pada data latih dan data validasi dipertahankan sama persis melalui random seed 42.
+- **Rasio Kelas Data Latih**: Relatif seimbang (BERANTAKAN: 37.3%, RAPI: 32.5%, KOSONG: 30.2%) sehingga model terlatih mengenali ketiga kondisi secara proporsional tanpa bias kelas mayoritas.
+- **Stratifikasi**: Distribusi kelas pada data validasi mencakup 34 gambar BERANTAKAN (50.0%), 30 gambar RAPI (44.1%), dan 4 gambar KOSONG (5.9% data lapangan asli tanpa augmentasi offline sintesis).
 
 ### 2.3 Karakteristik & Ciri Visual Tiap Kelas
 
@@ -92,8 +92,8 @@ Total: 425 gambar
 - Tidak ada sandal yang bertumpuk atau melintang menghalangi jalan.
 
 ### 2.4 Evaluasi Kualitas Data & Tantangan (Data Quality Assessment)
-1. **Ukuran Dataset Kecil (*Small Dataset*)**:
-   - Total 125 gambar merupakan dataset ringkas.
+1. **Ukuran Dataset Ringkas (*Dataset Overview*)**:
+   - Total 425 gambar (357 data latih dan 68 data validasi) mencakup tiga kondisi operasional lapangan: BERANTAKAN, RAPI, dan KOSONG.
    - *Analisis Solusi*: Pendekatan arsitektur **YOLOv8n-cls** yang memanfaatkan bobot awal (*pre-trained on ImageNet*) terbukti efektif karena model telah memiliki fitur representasi tepi, tekstur, dan bentuk dasar sejak awal, sehingga mampu mencapai akurasi 92% tanpa mengalami overfitting parah.
 2. **Variasi Background**:
    - Sebagian besar berlatar belakang lantai keramik putih atau bermotif abu-abu/krem. Sandal dengan warna kontras (merah, biru, hitam) sangat mudah dikenali.

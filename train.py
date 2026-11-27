@@ -80,7 +80,8 @@ def train():
     
     print("\n=== HASIL METRIK VALIDASI ===")
     print(f"Top-1 Accuracy : {val_metrics.top1 * 100:.2f}%")
-    print(f"Top-5 Accuracy : {val_metrics.top5 * 100:.2f}%")
+    print(f"Jumlah Kelas   : {len(eval_model.names)} ({', '.join(eval_model.names.values())})")
+    print(f"Target KPI     : Top-1 >= 90.00% (Tercapai: {'YA' if val_metrics.top1 >= 0.90 else 'BELUM'})")
     print("=" * 65)
 
 if __name__ == "__main__":

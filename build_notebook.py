@@ -62,7 +62,7 @@ sns.set_palette('tab10')
 plt.rcParams['figure.figsize'] = (10, 6)
 plt.rcParams['font.size'] = 11
 
-BASE_DIR = r"D:\deteksi_sandal"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 RUNS_DIR = os.path.join(BASE_DIR, "runs", "yolov8_sandal_v3") if os.path.exists(os.path.join(BASE_DIR, "runs", "yolov8_sandal_v3")) else os.path.join(BASE_DIR, "runs", "yolov8_sandal")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pt")
@@ -265,7 +265,7 @@ display(kpi_table)
 cells.append(nbf.v4.new_markdown_cell("""---
 ## 2. 📊 DATA UNDERSTANDING (Eksplorasi Data Mendalam Berbasis Kode)
 
-Pada tahap ini, seluruh citra dalam dataset `D:\\deteksi_sandal\\dataset` akan diekstraksi metadatanya secara otomatis menggunakan OpenCV dan PIL untuk memeriksa:
+Pada tahap ini, seluruh citra dalam dataset proyek akan diekstraksi metadatanya secara otomatis menggunakan OpenCV dan PIL untuk memeriksa:
 - Integritas file dan format citra.
 - Dimensi spasial (lebar, tinggi, rasio aspek, megapiksel).
 - Distribusi tingkat kecerahan (*brightness*) dan kontras.
@@ -546,34 +546,48 @@ cells.append(nbf.v4.new_code_cell("""# 3.2 MATRIKS PEMBAYARAN BISNIS (BUSINESS P
 # False Negative (FN): Sandal berantakan tidak dideteksi -> Koridor lab tetap semrawut (-15 poin ketertiban terabaikan)
 
 payoff_matrix = pd.DataFrame(
-    [[+25, -15],
-     [-8,  +10]],
-    index=['Aktual: BERANTAKAN', 'Aktual: RAPI'],
-    columns=['Prediksi: BERANTAKAN', 'Prediksi: RAPI']
+    [[+25, -15, -15],
+     [-8,  +10,  +8],
+     [-8,   +8, +10]],
+    index=['Aktual: BERANTAKAN', 'Aktual: RAPI', 'Aktual: KOSONG'],
+    columns=['Prediksi: BERANTAKAN', 'Prediksi: RAPI', 'Prediksi: KOSONG']
 )
 
-fig, ax = plt.subplots(figsize=(7, 5))
+fig, ax = plt.subplots(figsize=(8, 6))
 sns.heatmap(payoff_matrix, annot=True, fmt='+d', cmap='RdYlGn', cbar=False, ax=ax,
             annot_kws={'size': 14, 'weight': 'bold'})
-ax.set_title('Matriks Nilai Bisnis (Business Payoff Matrix)', fontsize=13, fontweight='bold', pad=12)
+ax.set_title('Matriks Nilai Bisnis (Business Payoff Matrix 3-Kelas)', fontsize=13, fontweight='bold', pad=12)
 plt.tight_layout()
 plt.show()
 
-# Simulasi 1.000 Deteksi Lapangan dengan Akurasi Model 92%:
-# Asumsi 40% Berantakan, 60% Rapi
+# Simulasi 1.000 Deteksi Lapangan dengan Akurasi Model 92.65%:
+# Asumsi Distribusi Lapangan: 35% Berantakan, 40% Rapi, 25% Kosong
 n_events = 1000
-tp_count = int(n_events * 0.40 * 0.92)  # 368
-fn_count = int(n_events * 0.40 * 0.08)  # 32
-tn_count = int(n_events * 0.60 * 0.92)  # 552
-fp_count = int(n_events * 0.60 * 0.08)  # 48
+acc = 0.9265
+err = 1.0 - acc
 
-net_business_value = (tp_count * 25) + (tn_count * 10) + (fp_count * -8) + (fn_count * -15)
-print(f"=== SIMULASI DAMPAK EKONOMI / REPUTASI (1.000 KEJADIAN) ===")
-print(f"True Positive  (Sandal Dirapikan)     : {tp_count}x  -> Nilai: +{tp_count * 25:,}")
-print(f"True Negative  (Lingkungan Tenang)    : {tn_count}x  -> Nilai: +{tn_count * 10:,}")
-print(f"False Positive (Audio Terpicu Salah)  : {fp_count}x  -> Nilai: {fp_count * -8:,}")
-print(f"False Negative (Sandal Terlewat)      : {fn_count}x  -> Nilai: {fn_count * -15:,}")
-print(f"TOTAL NET BUSINESS VALUE GENERATED    : +{net_business_value:,} poin utilitas")
+tp_count = int(n_events * 0.35 * acc)
+fn_count = int(n_events * 0.35 * err)
+tn_rapi_count = int(n_events * 0.40 * acc)
+fp_rapi_count = int(n_events * 0.40 * err)
+tn_kosong_count = int(n_events * 0.25 * acc)
+fp_kosong_count = int(n_events * 0.25 * err)
+
+net_business_value = (
+    (tp_count * 25) +
+    (tn_rapi_count * 10) +
+    (tn_kosong_count * 10) +
+    (fn_count * -15) +
+    (fp_rapi_count * -8) +
+    (fp_kosong_count * -8)
+)
+print(f"=== SIMULASI DAMPAK OPERASIONAL & KETERTIBAN (1.000 KEJADIAN) ===")
+print(f"True Positive (Sandal Dirapikan)        : {tp_count}x  -> Nilai: +{tp_count * 25:,}")
+print(f"True Negative Rapi (Kondisi Tertib)     : {tn_rapi_count}x  -> Nilai: +{tn_rapi_count * 10:,}")
+print(f"True Negative Kosong (Standby Tenang)   : {tn_kosong_count}x  -> Nilai: +{tn_kosong_count * 10:,}")
+print(f"False Positive (Audio Terpicu Keliru)   : {fp_rapi_count + fp_kosong_count}x  -> Dampak: {(fp_rapi_count + fp_kosong_count) * -8:,}")
+print(f"False Negative (Sandal Lewat)           : {fn_count}x  -> Dampak: {fn_count * -15:,}")
+print(f"TOTAL NET BUSINESS VALUE GENERATED       : +{net_business_value:,} poin utilitas")
 """))
 
 # ==========================================
@@ -635,7 +649,7 @@ cells.append(nbf.v4.new_markdown_cell("""---
 
 nb['cells'] = cells
 
-output_path = r"D:\deteksi_sandal\Business_and_Data_Understanding.ipynb"
+output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Business_and_Data_Understanding.ipynb")
 with open(output_path, 'w', encoding='utf-8') as f:
     nbf.write(nb, f)
 

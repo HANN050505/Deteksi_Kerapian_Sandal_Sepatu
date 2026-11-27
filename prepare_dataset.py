@@ -4,12 +4,14 @@ import random
 
 random.seed(42)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 SOURCE_DIRS = {
-    'BERANTAKAN': r'C:\Users\Raihan aryanova\Downloads\BERANTAKAN-20261108T182328Z-1-001\BERANTAKAN',
-    'RAPI': r'C:\Users\Raihan aryanova\Downloads\RAPI-20261108T182328Z-1-001\RAPI'
+    'BERANTAKAN': os.path.join(DOWNLOADS_DIR, "BERANTAKAN-20261108T182328Z-1-001", "BERANTAKAN"),
+    'RAPI': os.path.join(DOWNLOADS_DIR, "RAPI-20261108T182328Z-1-001", "RAPI")
 }
 
-DEST_DIR = r'D:\deteksi_sandal\dataset'
+DEST_DIR = os.path.join(BASE_DIR, "dataset")
 
 def collect_files(source_dir):
     collected = []
