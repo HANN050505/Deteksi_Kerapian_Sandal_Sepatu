@@ -1,0 +1,137 @@
+{
+  "dataset_name": "dataset",
+  "dataset_path": "D:\\deteksi_sandal\\dataset",
+  "total_images": 425,
+  "distribution": {
+    "train": {
+      "BERANTAKAN": 133,
+      "KOSONG": 108,
+      "RAPI": 116
+    },
+    "val": {
+      "BERANTAKAN": 34,
+      "KOSONG": 4,
+      "RAPI": 30
+    }
+  },
+  "exact_duplicates_count": 13,
+  "cross_split_exact_leaks_count": 4,
+  "cross_split_exact_leaks": [
+    {
+      "md5": "95acb74b78e253a235d54c6bf4340a89",
+      "count": 2,
+      "splits": [
+        "train",
+        "val"
+      ],
+      "files": [
+        "train\\BERANTAKAN\\new_berantakan_020_24-034 Berantakan 3.jpg",
+        "val\\BERANTAKAN\\new_berantakan_000_24-003 Berantakan 2.jpg"
+      ]
+    },
+    {
+      "md5": "d82769cc2b9bc677b77c8d02ceacd58a",
+      "count": 2,
+      "splits": [
+        "train",
+        "val"
+      ],
+      "files": [
+        "train\\BERANTAKAN\\new_berantakan_055_24-115 Berantakan 2.jpeg",
+        "val\\BERANTAKAN\\new_berantakan_037_24-079 Berantakan 2.jpeg"
+      ]
+    },
+    {
+      "md5": "e9bf2225e29a534d88b72e1de595ca1e",
+      "count": 2,
+      "splits": [
+        "train",
+        "val"
+      ],
+      "files": [
+        "train\\RAPI\\new_rapi_019_24-034 Rapi 2.jpg",
+        "val\\RAPI\\new_rapi_015_24-031 Rapi1.jpg"
+      ]
+    },
+    {
+      "md5": "7865ed2f0d5746826a860c17bf213503",
+      "count": 3,
+      "splits": [
+        "train",
+        "val"
+      ],
+      "files": [
+        "train\\RAPI\\new_rapi_041_24-081 Rapi 3.jpg",
+        "train\\RAPI\\new_rapi_052_24-115 Rapi 2.jpg",
+        "val\\RAPI\\new_rapi_066_24-145 Rapi 3.jpg"
+      ]
+    }
+  ],
+  "near_duplicates_cross_split_count": 7,
+  "near_duplicates_cross_split": [
+    {
+      "split_a": "train",
+      "file_a": "train\\BERANTAKAN\\new_berantakan_020_24-034 Berantakan 3.jpg",
+      "class_a": "BERANTAKAN",
+      "split_b": "val",
+      "file_b": "val\\BERANTAKAN\\new_berantakan_000_24-003 Berantakan 2.jpg",
+      "class_b": "BERANTAKAN",
+      "hamming_distance": 0
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\BERANTAKAN\\new_berantakan_055_24-115 Berantakan 2.jpeg",
+      "class_a": "BERANTAKAN",
+      "split_b": "val",
+      "file_b": "val\\BERANTAKAN\\new_berantakan_037_24-079 Berantakan 2.jpeg",
+      "class_b": "BERANTAKAN",
+      "hamming_distance": 0
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\BERANTAKAN\\old_berantakan_041_Kelompok_5_IMG_20261106_135749608_BURST0020.jpg",
+      "class_a": "BERANTAKAN",
+      "split_b": "val",
+      "file_b": "val\\BERANTAKAN\\old_berantakan_039_Kelompok_5_IMG_20261106_135749608_BURST0001_COVER.jpg",
+      "class_b": "BERANTAKAN",
+      "hamming_distance": 2
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\BERANTAKAN\\old_berantakan_041_Kelompok_5_IMG_20261106_135749608_BURST0020.jpg",
+      "class_a": "BERANTAKAN",
+      "split_b": "val",
+      "file_b": "val\\BERANTAKAN\\old_berantakan_040_Kelompok_5_IMG_20261106_135749608_BURST0019.jpg",
+      "class_b": "BERANTAKAN",
+      "hamming_distance": 0
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\RAPI\\new_rapi_019_24-034 Rapi 2.jpg",
+      "class_a": "RAPI",
+      "split_b": "val",
+      "file_b": "val\\RAPI\\new_rapi_015_24-031 Rapi1.jpg",
+      "class_b": "RAPI",
+      "hamming_distance": 0
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\RAPI\\new_rapi_041_24-081 Rapi 3.jpg",
+      "class_a": "RAPI",
+      "split_b": "val",
+      "file_b": "val\\RAPI\\new_rapi_066_24-145 Rapi 3.jpg",
+      "class_b": "RAPI",
+      "hamming_distance": 0
+    },
+    {
+      "split_a": "train",
+      "file_a": "train\\RAPI\\new_rapi_052_24-115 Rapi 2.jpg",
+      "class_a": "RAPI",
+      "split_b": "val",
+      "file_b": "val\\RAPI\\new_rapi_066_24-145 Rapi 3.jpg",
+      "class_b": "RAPI",
+      "hamming_distance": 0
+    }
+  ],
+  "audit_timestamp": "2026-11-27 15:57:32"
+}

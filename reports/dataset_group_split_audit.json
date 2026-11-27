@@ -1,0 +1,28 @@
+{
+  "dataset_name": "dataset_group_split",
+  "dataset_path": "D:\\deteksi_sandal\\dataset_group_split",
+  "total_images": 425,
+  "distribution": {
+    "test": {
+      "BERANTAKAN": 26,
+      "KOSONG": 19,
+      "RAPI": 23
+    },
+    "train": {
+      "BERANTAKAN": 114,
+      "KOSONG": 74,
+      "RAPI": 100
+    },
+    "val": {
+      "BERANTAKAN": 27,
+      "KOSONG": 19,
+      "RAPI": 23
+    }
+  },
+  "exact_duplicates_count": 13,
+  "cross_split_exact_leaks_count": 0,
+  "cross_split_exact_leaks": [],
+  "near_duplicates_cross_split_count": 0,
+  "near_duplicates_cross_split": [],
+  "audit_timestamp": "2026-11-27 16:07:26"
+}

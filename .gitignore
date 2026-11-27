@@ -34,6 +34,10 @@ $RECYCLE.BIN/
 temp_*/
 *.tmp
 
+# Dataset backups & experimental splits
+dataset_backup_*/
+dataset_group_split/
+
 # Archives and temporary files
 *.zip
 *.tar.gz
