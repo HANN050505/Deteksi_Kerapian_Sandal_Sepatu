@@ -495,14 +495,16 @@ Menghubungkan metrik performa teknis hasil pelatihan YOLOv8n-cls dengan dampak b
 """))
 
 # ==========================================
-# 15. RESULTS.CSV PARSING & CURVES (CODE)
+# 15. RESULTS.CSV PARSING & EMPIRICAL EVALUATION REPORT
 # ==========================================
-cells.append(nbf.v4.new_code_cell("""# 3.1 EVALUASI KURVA PELATIHAN (RESULTS.CSV)
+cells.append(nbf.v4.new_code_cell("""# 3.1 EVALUASI KURVA PELATIHAN & LAPORAN EVALUASI EMPIRIS
+import json
+
 csv_path = os.path.join(RUNS_DIR, "results.csv")
+report_path = os.path.join(BASE_DIR, "reports", "evaluation_report.json")
 
 if os.path.exists(csv_path):
     df_results = pd.read_csv(csv_path)
-    # Bersihkan nama kolom yang memiliki spasi
     df_results.columns = [c.strip() for c in df_results.columns]
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -510,14 +512,13 @@ if os.path.exists(csv_path):
     # Plot Loss Curves
     ax1.plot(df_results['epoch'], df_results['train/loss'], 'r-o', label='Training Loss', linewidth=2)
     ax1.plot(df_results['epoch'], df_results['val/loss'], 'b-s', label='Validation Loss', linewidth=2)
-    ax1.set_title('Kurva Training Loss vs Validation Loss (25 Epoch)', fontsize=12, fontweight='bold')
+    ax1.set_title('Kurva Training Loss vs Validation Loss', fontsize=12, fontweight='bold')
     ax1.set_xlabel('Epoch', fontsize=11)
     ax1.set_ylabel('Cross-Entropy Loss', fontsize=11)
     ax1.legend()
     
     # Plot Top-1 Accuracy
-    ax2.plot(df_results['epoch'], df_results['metrics/accuracy_top1'] * 100, 'g-^', label='Top-1 Accuracy', linewidth=2.5)
-    ax2.axhline(y=92.0, color='orange', linestyle='--', label='Akurasi Terbaik: 92.0%')
+    ax2.plot(df_results['epoch'], df_results['metrics/accuracy_top1'] * 100, 'g-^', label='Validation Accuracy', linewidth=2.5)
     ax2.set_title('Kurva Akurasi Validasi (Top-1 Accuracy %)', fontsize=12, fontweight='bold')
     ax2.set_xlabel('Epoch', fontsize=11)
     ax2.set_ylabel('Accuracy (%)', fontsize=11)
@@ -526,11 +527,21 @@ if os.path.exists(csv_path):
     
     plt.tight_layout()
     plt.show()
-    
-    print(f"Final Epoch Loss       : Train = {df_results['train/loss'].iloc[-1]:.4f}, Val = {df_results['val/loss'].iloc[-1]:.4f}")
-    print(f"Akurasi Validasi Puncak: {df_results['metrics/accuracy_top1'].max() * 100:.1f}%")
+
+# Pemuatan Laporan Evaluasi Riil dari reports/evaluation_report.json
+if os.path.exists(report_path):
+    with open(report_path, "r", encoding="utf-8") as f:
+        eval_report = json.load(f)
+    comp = eval_report.get("comparison", {})
+    print("=" * 70)
+    print("  HASIL EVALUASI NYATA PADA TEST SET BEBAS KEBOCORAN (reports/evaluation_report.json)")
+    print("=" * 70)
+    for m_name, m_val in comp.items():
+        ci = m_val.get('accuracy_ci_95', [0, 0])
+        print(f"Konfigurasi: {m_name:<18} | Akurasi: {m_val['accuracy']*100:.2f}% (Wilson 95% CI: [{ci[0]*100:.1f}%, {ci[1]*100:.1f}%]) | FAR: {m_val['false_alarm_rate']*100:.2f}% | F1: {m_val['macro_f1']:.4f}")
+    print("=" * 70)
 else:
-    print(f"File {csv_path} tidak ditemukan.")
+    print(f"File laporan evaluasi {report_path} belum ditemukan. Jalankan evaluate.py terlebih dahulu.")
 """))
 
 # ==========================================
@@ -637,15 +648,26 @@ cells.append(nbf.v4.new_markdown_cell("""---
 ## 4. 🚀 KESIMPULAN & REKOMENDASI DEPLOYMENT LAPANGAN
 
 ### 4.1 Rangkuman Temuan Bisnis & Data:
-1. **Kelayakan Finansial & Operasional**: Sistem mencapai titik impas (*Break-Even Point*) dalam **2 bulan** pertama dan menghasilkan efisiensi jam kerja laboran/asisten praktikum sebesar **85%** dari tugas penertiban manual.
-2. **Kualitas Dataset (3 Kelas)**: Terdiri dari 425 gambar (357 train : 68 val) mencakup kondisi `BERANTAKAN`, `RAPI`, dan `KOSONG` (lantai bersih koridor lab) sehingga menghilangkan risiko *false alarm* pada ruangan sepi.
-3. **Performa Model**: Arsitektur YOLOv8n-cls mencapai akurasi validasi **92.65%** dengan kecepatan inferensi **~8–12 ms per frame** pada CPU, sangat ringan dijalankan pada PC lab, Mini PC, atau SBC.
+1. **Pemisahan Status Hasil**:
+   - **Hasil Terukur (Empirical)**: Akurasi test set independen ($N=68$) mencapai **95.59%** (Ensemble) dan **97.06%** (Single Model). Penerapan threshold keyakinan (70%) memangkas False Alarm Rate menjadi **4.35%**.
+   - **Target Proyek**: Target akurasi $\ge 90\%$ dan False Alarm Rate $< 10\%$ terverifikasi tercapai pada pengujian riil.
+   - **Asumsi / Simulasi**: Efisiensi jam kerja laboran dan tingkat kepatuhan praktikan disajikan sebagai estimasi simulasi operasional.
+2. **Kualitas Dataset (3 Kelas Bebas Kebocoran)**:
+   - Terdiri dari 425 gambar (288 train : 69 val : 68 test) mencakup kondisi `BERANTAKAN`, `RAPI`, dan `KOSONG` (22 citra unik lapangan). Audit perceptual hash memastikan 0% kebocoran data antar split.
+3. **Performa Sistem Real-Time**:
+   - Latensi inferensi CPU riil berkisar ~720 - 1440 ms untuk evaluasi ensemble penuh. Berkat arsitektur *Threaded Asynchronous Worker*, pemantauan video stream kamera tetap berjalan lancar pada 30+ FPS tanpa jeda (freeze).
 
 ### 4.2 Spesifikasi Instalasi Lapangan Laboratorium yang Direkomendasikan:
 - **Ketinggian & Sudut Kamera**: Ketinggian 2.0 – 2.5 meter dengan sudut kemiringan (tilt) 40° – 50° menghadap pintu masuk Lab Teknik Informatika / area rak sandal.
 - **Pencahayaan Koridor**: Penerangan standar lampu koridor lab (~150-200 Lux).
-- **Pengaturan Speaker**: Volume 55–60 dB dengan jeda cooldown minimal 12 detik agar peringatan terdengar jelas tanpa mengganggu sesi praktikum di dalam lab.
+- **Pengaturan Waktu**: Waktu tenang pergerakan (*motion settle*) 1.8 detik dan jeda *cooldown* 10 detik agar sistem responsif tanpa memicu suara berulang.
 """))
+
+# Pastikan semua output sel dikosongkan (clear outputs) agar ukuran notebook tetap ringan (< 50 KB)
+for cell in cells:
+    if cell.cell_type == 'code':
+        cell.outputs = []
+        cell.execution_count = None
 
 nb['cells'] = cells
 
@@ -653,14 +675,5 @@ output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Business
 with open(output_path, 'w', encoding='utf-8') as f:
     nbf.write(nb, f)
 
-print(f"Notebook berhasil dibuat di: {output_path}")
-
-# Sekarang kita eksekusi notebook tersebut agar seluruh output & grafiknya langsung tersimpan di dalamnya
-print("Mengeksekusi notebook untuk merender seluruh plot, tabel, dan metrik...")
-client = NotebookClient(nb, timeout=600, kernel_name='python3')
-executed_nb = client.execute()
-
-with open(output_path, 'w', encoding='utf-8') as f:
-    nbf.write(executed_nb, f)
-
-print("Notebook berhasil dieksekusi dan semua output tersimpan lengkap!")
+print(f"Notebook berhasil dibuat tanpa output berlebih di: {output_path}")
+print(f"Ukuran file: {os.path.getsize(output_path) / 1024:.1f} KB")

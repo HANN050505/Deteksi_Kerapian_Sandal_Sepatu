@@ -576,51 +576,91 @@ with tab_metrics:
     Model dilatih menggunakan arsitektur **YOLOv8 Nano Classifier (Pretrained Transfer Learning)** dengan optimasi **AdamW** dan **Cosine Annealing Learning Rate**. Sistem mengenali 3 kelas kondisi: **BERANTAKAN**, **RAPI**, dan **KOSONG** (lantai bersih/standby).
     """)
 
-    # KPI Metrics
-    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-    kpi1.metric("Top-1 Accuracy", "92.65%", "+2.65% vs target")
-    kpi2.metric("Top-5 Accuracy", "100.0%", "Sempurna")
-    kpi3.metric("Total Dataset", "425 Citra", "357 Latih / 68 Uji")
-    kpi4.metric("Klasifikasi", "3 Kelas", "Berantakan/Rapi/Kosong")
-    kpi5.metric("Latensi Inferensi", "~8-12 ms", "Real-Time CPU")
+    # Pemuatan data laporan evaluasi dinamis dari reports/
+    eval_json_path = os.path.join(CORE_BASE_DIR, "reports", "evaluation_report.json")
+    cm_eval_img_path = os.path.join(CORE_BASE_DIR, "reports", "confusion_matrix_eval.png")
+
+    eval_data = None
+    if os.path.exists(eval_json_path):
+        try:
+            import json
+            with open(eval_json_path, "r", encoding="utf-8") as f:
+                eval_data = json.load(f)
+        except Exception as e:
+            st.warning(f"Gagal membaca evaluation_report.json: {e}")
+
+    if eval_data:
+        comp = eval_data.get("comparison", {})
+        ens = comp.get("ensemble", {})
+        single = comp.get("single", {})
+        ens_thresh = comp.get("ensemble_threshold", {})
+        split_name = eval_data.get("dataset_split", "test").upper()
+        n_samples = eval_data.get("total_samples", 68)
+
+        # Kartu KPI Terukur Objektif
+        kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+        acc_pct = ens.get("accuracy", 0.9559) * 100
+        ci_95 = ens.get("accuracy_ci_95", [0.878, 0.985])
+        far_pct = ens_thresh.get("false_alarm_rate", 0.0435) * 100
+
+        kpi1.metric("Top-1 Accuracy", f"{acc_pct:.2f}%", f"CI: [{ci_95[0]*100:.1f}%, {ci_95[1]*100:.1f}%]")
+        kpi2.metric("False Alarm Rate", f"{far_pct:.2f}%", "1/23 RAPI salah")
+        kpi3.metric("Test Set Independen", f"{n_samples} Citra", f"Split {split_name} Bebas Bocor")
+        kpi4.metric("Klasifikasi Citra", "3 Kelas", "Berantakan/Rapi/Kosong")
+        kpi5.metric("Latensi Riil CPU", "~720 ms", "Spatial Ensemble")
+
+        st.info(f"📋 **Hasil Pengukuran Terukur Objektif:** Data evaluasi di bawah diperoleh dari pengujian empiris pada **{split_name} SET** ({n_samples} sampel independen tanpa kebocoran data).")
+
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.markdown("##### 📌 Tabel Komparasi Konfigurasi Model (Data Uji Riil)")
+            comp_table = [
+                {
+                    "Konfigurasi": "Model Tunggal (Single)",
+                    "Akurasi": f"{single.get('accuracy', 0)*100:.2f}%",
+                    "False Alarm Rate": f"{single.get('false_alarm_rate', 0)*100:.2f}%",
+                    "Macro F1": f"{single.get('macro_f1', 0):.4f}",
+                },
+                {
+                    "Konfigurasi": "Spatial Ensemble (0.50/0.35/0.15)",
+                    "Akurasi": f"{ens.get('accuracy', 0)*100:.2f}%",
+                    "False Alarm Rate": f"{ens.get('false_alarm_rate', 0)*100:.2f}%",
+                    "Macro F1": f"{ens.get('macro_f1', 0):.4f}",
+                },
+                {
+                    "Konfigurasi": "Ensemble + Threshold Keyakinan (70%)",
+                    "Akurasi": f"{ens_thresh.get('accuracy', 0)*100:.2f}%",
+                    "False Alarm Rate": f"{ens_thresh.get('false_alarm_rate', 0)*100:.2f}%",
+                    "Macro F1": f"{ens_thresh.get('macro_f1', 0):.4f}",
+                },
+            ]
+            st.dataframe(comp_table, use_container_width=True)
+
+        with col_t2:
+            st.markdown("##### 🎯 Metrik per Kelas (Ensemble)")
+            cls_m = ens.get("class_metrics", {})
+            cls_table = []
+            for c_name, vals in cls_m.items():
+                cls_table.append({
+                    "Kelas": c_name,
+                    "Precision": f"{vals.get('precision', 0)*100:.1f}%",
+                    "Recall": f"{vals.get('recall', 0)*100:.1f}%",
+                    "F1-Score": f"{vals.get('f1_score', 0):.4f}",
+                    "Jumlah Sampel": vals.get("support", 0),
+                })
+            st.dataframe(cls_table, use_container_width=True)
+
+        if os.path.exists(cm_eval_img_path):
+            st.markdown("---")
+            st.markdown("##### 📊 Visualisasi Confusion Matrix Komparatif (Single vs Ensemble vs Threshold)")
+            st.image(cm_eval_img_path, caption="Confusion Matrix Terukur pada Test Set Independen", use_container_width=True)
+    else:
+        st.warning("File laporan `reports/evaluation_report.json` belum ditemukan. Jalankan `python evaluate.py` untuk mengukur performa terkini.")
 
     st.markdown("---")
-    col_cm, col_curve = st.columns(2)
-
-    cm_path = os.path.join(RUNS_DIR, "confusion_matrix_normalized.png")
-    results_path = os.path.join(RUNS_DIR, "results.png")
-
-    with col_cm:
-        st.markdown("##### 🎯 Confusion Matrix (Normalized)")
-        if os.path.exists(cm_path):
-            st.image(cm_path, caption="Confusion Matrix Normalized 3-Class", use_container_width=True)
-        else:
-            st.info("Confusion matrix image tidak ditemukan.")
-
-    with col_curve:
-        st.markdown("##### 📈 Kurva Training & Validasi (Loss & Accuracy)")
-        if os.path.exists(results_path):
-            st.image(results_path, caption="Kurva Metrik Training Selama Epochs", use_container_width=True)
-        else:
-            st.info("Grafik hasil training tidak ditemukan.")
-
-    st.markdown("---")
-
-    csv_path = os.path.join(RUNS_DIR, "results.csv")
-    if os.path.exists(csv_path):
-        with st.expander("📄 Tabel Riwayat Epoch Training (results.csv)", expanded=False):
-            try:
-                import pandas as pd
-                df_res = pd.read_csv(csv_path)
-                df_res.columns = df_res.columns.str.strip()
-                st.dataframe(df_res, use_container_width=True)
-            except Exception as e:
-                st.write(f"Tidak dapat membaca file CSV: {e}")
-
     st.markdown("""
-    ### 📋 Rangkuman Optimalisasi & Efisiensi:
-    - **Ultra-Low Bandwidth JPEG Streaming**: Mengurangi konsumsi data WebSocket dari ~28 MB/s menjadi hanya **~300 KB/s** (penghematan 98%), melenyapkan lag jaringan saat streaming di HP atau laptop.
-    - **Batch Spatial Ensemble**: Menjalankan evaluasi Global, Floor Focus, dan Flip TTA dalam 1 kali batch pass, mempercepat inferensi hingga 60%.
-    - **Detektor Gerakan 240x160**: Pemantauan aktivitas hanya memakan < 0.2 ms komputasi, menjaga CPU tetap dingin dan responsif.
-    - **Pembersihan File**: File cadangan usang, runs lama, dan script duplikat telah dibersihkan.
+    ### 📋 Pemisahan Status: Terukur vs Target vs Asumsi
+    - **Hasil Terukur (Empirical)**: Akurasi test set terukur sebesar **95.59%** (Ensemble) dan **97.06%** (Single Model). Ambang batas keyakinan (70%) berhasil memangkas False Alarm Rate dari 8.70% menjadi **4.35%**.
+    - **Target Sistem**: Target teknis Top-1 Accuracy $\ge 90\%$ dan False Alarm Rate $< 10\%$ telah tercapai pada test set independen.
+    - **Asumsi / Simulasi**: Peringatan suara diasumsikan dapat memicu kesadaran mandiri mahasiswa (efek *behavioral nudge*). Validasi dampak kedisiplinan riil memerlukan pencatatan longitudinal di lapangan.
     """)

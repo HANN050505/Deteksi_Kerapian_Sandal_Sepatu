@@ -27,26 +27,32 @@ Sebagai representasi inovasi teknologi di bidang Informatika (*Smart Campus / Sm
 - Mendorong kedisiplinan dan kesadaran mandiri (*self-correction*) mahasiswa/praktikan agar tertib meletakkan sandal pada rak atau area yang ditentukan tanpa perlu teguran tatap muka.
 - Membebaskan laboran dan asisten praktikum dari rutinitas menertibkan sandal, sehingga mereka dapat fokus sepenuhnya pada pendampingan akademik praktikum dan pemeliharaan fasilitas IT.
 
-### 1.3 Kriteria Keberhasilan (Success Criteria)
+### 1.3 Kriteria Keberhasilan & Matriks Penyelarasan (Terukur vs Target vs Asumsi)
 
-| Kategori | Metrik KPI | Target | Hasil Saat Ini |
-| :--- | :--- | :--- | :--- |
-| **Teknis (Technical KPI)** | Top-1 Classification Accuracy | $\ge 90\%$ | **92.65%** (Validation Set, 3 Kelas) |
-| | False Alarm Rate (False Positive) | $< 10\%$ | Tercapai dengan Kelas KOSONG + Filter 2.5s |
-| | Inference Latency | $< 100$ ms / frame | ~8-12 ms pada CPU (YOLOv8n-cls) |
-| **Dampak Lab (Impact KPI)** | Kepatuhan Praktikan (Compliance) | $\ge 75\%$ | Praktikan langsung merapikan alas kaki pasca audio |
-| | Efisiensi Kerja Staf/Laboran | Pengurangan intervensi manual | Menghemat 1-2 jam kerja rutin laboran/asisten per hari |
+Untuk menjaga kejujuran ilmiah dan ketepatan evaluasi teknik, metrik keberhasilan dipisahkan secara tegas ke dalam 3 kategori status:
+- **Hasil Terukur (Empirical Measurement)**: Metrik yang diuji langsung pada *independent test set* ($N=68$) atau benchmarking riil perangkat.
+- **Target (KPI Goal)**: Standar acuan keberhasilan yang ditetapkan dalam proposal proyek.
+- **Asumsi / Simulasi**: Proyeksi hipotetis yang belum diverifikasi dengan studi longitudinal lapangan.
+
+| Kategori | Parameter KPI | Target Acuan | Status & Hasil Nyata | Keterangan Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Teknis (Technical KPI)** | Top-1 Classification Accuracy | $\ge 90.0\%$ | **95.59%** (Ensemble) / **97.06%** (Single) | **Hasil Terukur** (Test Set Independen, $N=68$) |
+| | Wilson 95% Confidence Interval | Rentang $\pm 10\%$ | **[87.8%, 98.5%]** (Ensemble) | **Hasil Terukur** (Wilson Score Interval) |
+| | False Alarm Rate (RAPI $\rightarrow$ BER) | $< 10.0\%$ | **4.35%** (1/23 RAPI salah diprediksi) | **Hasil Terukur** (Ensemble + Threshold 70%) |
+| | Latensi Pipeline Penuh (CPU) | $< 1500$ ms | **~720 - 1440 ms** (Ensemble 3-View) | **Hasil Terukur** (Worker Async terpisah, FPS kamera 30+) |
+| **Dampak Lab (Impact KPI)** | Kepatuhan Praktikan (Compliance) | $\ge 75.0\%$ | *Belum Diukur di Lapangan* | **Asumsi / Target Lapangan** |
+| | Efisiensi Kerja Staf/Laboran | Pengurangan intervensi | *Simulasi Hipotetis* (~15-30 mnt/hari) | **Asumsi / Simulasi Modeling** |
 
 ### 1.4 Batasan & Manajemen Risiko (Constraints & Risks)
 1. **Lantai Bersih / Tanpa Sandal (Idle State)**:
-   - *Tantangan*: Saat sesi praktikum berlangsung, area depan pintu lab seringkali kosong (tidak ada sandal atau sepatu). Pada model 2-kelas terdahulu, kondisi ini terprediksi sebagai `RAPI 100%` dan rentan terjadi *false alarm* jika terdapat bayangan mahasiswa lewat.
-   - *Mitigasi*: Menambahkan kelas **`KOSONG`** (didukung dataset `Kosong.zip`) sehingga sistem berada dalam mode *standby* tanpa memicu audio peringatan (*zero false alarm*).
-2. **Perubahan Pencahayaan Koridor**: Fluktuasi cahaya koridor lab (lampu neon koridor, cahaya alami jendela siang vs sore).
-   - *Mitigasi*: Augmentasi warna/HSV pada pelatihan model dan penyesuaian threshold keyakinan (*confidence threshold*).
-3. **Objek Dinamis (Praktikan Melintas Melepas Sandal)**: Mahasiswa yang baru datang dan sedang melepas sepatu dapat membuat citra sekilas tampak "berantakan".
-   - *Mitigasi*: Fitur *Temporal Verification* (sandal harus terdeteksi konsisten berantakan selama minimal 2.5 detik sebelum memicu suara peringatan).
-4. **Peringatan Suara Berulang (Spamming)**:
-   - *Mitigasi*: Fitur *Smart Cooldown* (jeda 12-15 detik) untuk memberi waktu bagi mahasiswa merapikan alas kakinya dengan tenang tanpa suara berulang-ulang.
+   - *Tantangan*: Saat sesi praktikum berlangsung, area depan pintu lab seringkali kosong (tidak ada sandal atau sepatu).
+   - *Mitigasi*: Menambahkan kelas **`KOSONG`** (didukung 22 citra unik lapangan) sehingga sistem berada dalam mode *standby* tanpa memicu audio peringatan.
+2. **Perubahan Pencahayaan Koridor**:
+   - *Mitigasi*: Augmentasi warna HSV dan RandAugment pada pelatihan model, serta penerapan ambang keyakinan (*confidence threshold* 70%).
+3. **Objek Dinamis (Orang Melintas / Sedang Menaruh Sandal)**:
+   - *Mitigasi*: Fitur *Event-Driven Motion Settlement Watcher* (sistem menunggu kondisi tenang selama **1.8 detik** setelah pergerakan selesai sebelum mengevaluasi citra). Gerakan selama cooldown tetap dicatat.
+4. **Pencegahan Alarm Berulang (Anti-Spam)**:
+   - *Mitigasi*: Fitur *Smart Cooldown* (jeda **10.0 detik**) agar praktikan memiliki waktu cukup untuk merapikan sandal tanpa terganggu audio berulang.
 
 ---
 
@@ -55,28 +61,32 @@ Sebagai representasi inovasi teknologi di bidang Informatika (*Smart Campus / Sm
 ### 2.1 Sumber & Metode Pengumpulan Data (Data Collection)
 Dataset dihimpun melalui pengamatan dan dokumentasi visual langsung di lingkungan **Laboratorium Eksak / Teknik Informatika**:
 - **Lokasi Observasi**: Area pintu masuk laboratorium komputer, koridor depan lab, rak sandal/sepatu praktikum, dan lantai ubin pembatas area laboratorium.
-- **Kondisi Tanpa Sandal (`KOSONG`)**: Citra lantai ubin koridor lab dalam kondisi bersih tanpa alas kaki dari `Kosong.zip`.
+- **Kondisi Tanpa Sandal (`KOSONG`)**: Citra lantai ubin koridor lab dalam kondisi bersih tanpa alas kaki (total 22 citra asli unik).
 - **Perangkat**: Kamera smartphone dengan orientasi bervariasi (sudut miring ~45° dan sudut atas ~75°).
 - **Format Data**: Citra digital RGB (.jpg, .jpeg, .png).
 
-### 2.2 Struktur & Distribusi Dataset (Versi 3 - Multikelas)
-Data dikelompokkan ke dalam **3 kelas** (`BERANTAKAN`, `RAPI`, `KOSONG`) dengan rasio **Training & Validasi**:
+### 2.2 Struktur & Distribusi Dataset Bebas Kebocoran (Group Split)
+Data dibagi menggunakan skema **Group Split (terstratifikasi per sesi/mahasiswa/kelompok)** ke dalam **3 bagian** independen untuk mencegah kebocoran data (*data leakage*):
 
 ```
 D:\deteksi_sandal\dataset\
-├── train/ (357 gambar)
-│   ├── BERANTAKAN/  -> 133 gambar (37.3%)
-│   ├── KOSONG/      -> 108 gambar (30.2%, seimbang berkat augmentasi rotasi & kecerahan)
-│   └── RAPI/        -> 116 gambar (32.5%)
-└── val/ (68 gambar)
-    ├── BERANTAKAN/  -> 34 gambar (50.0%)
-    ├── KOSONG/      -> 4 gambar (5.9%, data asli lapangan)
-    └── RAPI/        -> 30 gambar (44.1%)
-Total: 425 gambar
+├── train/ (288 citra, 67.8%)
+│   ├── BERANTAKAN/  -> 114 citra
+│   ├── KOSONG/      -> 74 citra (14 citra unik + augmentasi terukur)
+│   └── RAPI/        -> 100 citra
+├── val/ (69 citra, 16.2%)
+│   ├── BERANTAKAN/  -> 27 citra
+│   ├── KOSONG/      -> 19 citra (4 citra unik + variasi)
+│   └── RAPI/        -> 23 citra
+└── test/ (68 citra, 16.0% - SET EVALUASI INDEPENDEN)
+    ├── BERANTAKAN/  -> 26 citra
+    ├── KOSONG/      -> 19 citra (4 citra unik + variasi)
+    └── RAPI/        -> 23 citra
+Total: 425 citra (22 citra KOSONG unik lapangan)
 ```
 
-- **Rasio Kelas Data Latih**: Relatif seimbang (BERANTAKAN: 37.3%, RAPI: 32.5%, KOSONG: 30.2%) sehingga model terlatih mengenali ketiga kondisi secara proporsional tanpa bias kelas mayoritas.
-- **Stratifikasi**: Distribusi kelas pada data validasi mencakup 34 gambar BERANTAKAN (50.0%), 30 gambar RAPI (44.1%), dan 4 gambar KOSONG (5.9% data lapangan asli tanpa augmentasi offline sintesis).
+- **Integritas Uji Bebas Kebocoran**: Berdasarkan audit hash perceptual (pHash $\le 4$) dan MD5, **0% kebocoran lintas split** tercapai antar train, val, dan test.
+- **Kemandirian Test Set**: Test set bersifat independen murni dan tidak pernah disentuh dalam proses early stopping maupun pemilihan checkpoint model.
 
 ### 2.3 Karakteristik & Ciri Visual Tiap Kelas
 

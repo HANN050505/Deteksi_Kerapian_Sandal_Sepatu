@@ -10,41 +10,42 @@ Sistem Computer Vision berbasis **YOLOv8 Nano Classifier (3 Kelas: BERANTAKAN, R
 ```
 deteksi_sandal/
 │
+├── core/                       <- Modul inti terpadu (config, motion watcher, inference)
+│   ├── config.py               <- Parameter konfigurasi terpusat (single source of truth)
+│   ├── motion.py               <- Event-driven motion settlement watcher & state machine
+│   └── inference.py            <- Pipeline prediksi tunggal, spatial ensemble & letterbox
+│
+├── tools/                      <- Perangkat bantu dataset & audit integritas
+│   ├── audit_dataset.py        <- Detektor duplikat (MD5) & near-duplicate (pHash)
+│   └── split_dataset.py        <- Skrip Group Split 3-bagian bebas kebocoran data
+│
+├── reports/                    <- Laporan evaluasi empiris terukur (JSON & Confusion Matrix)
+│   ├── evaluation_report.json  <- Metrik terukur, Wilson 95% CI & False Alarm Rate
+│   └── confusion_matrix_eval.png
+│
 ├── audio/
 │   └── peringatan.mp3          <- Audio peringatan bahasa Indonesia
 │
-├── dataset/
-│   ├── train/
-│   │   ├── BERANTAKAN/         <- 133 gambar
-│   │   ├── KOSONG/             <- 108 gambar (tanpa alas kaki)
-│   │   └── RAPI/               <- 116 gambar
-│   └── val/
-│       ├── BERANTAKAN/         <- 34 gambar
-│       ├── KOSONG/             <- 4 gambar
-│       └── RAPI/               <- 30 gambar
+├── dataset/                    <- Dataset 3-split bebas kebocoran lintas grup
+│   ├── train/                  <- 288 gambar (114 Berantakan, 100 Rapi, 74 Kosong)
+│   ├── val/                    <- 69 gambar (27 Berantakan, 23 Rapi, 19 Kosong)
+│   └── test/                   <- 68 gambar (26 Berantakan, 23 Rapi, 19 Kosong)
 │
 ├── models/
 │   ├── best.pt                 <- Bobot model terbaik 3-kelas (BERANTAKAN, RAPI, KOSONG)
-│   └── best_v2_backup.pt       <- Cadangan bobot model versi 2
+│   └── best_v2_backup.pt       <- Cadangan bobot model versi terdahulu
 │
-├── runs/                       <- Log dan grafik metrik hasil training
-│
-├── app_upload.py               <- Dashboard Web interaktif (Streamlit) untuk upload foto & kamera HP
-├── predict_image.py            <- Script desktop pengujian foto (File picker / CLI)
-├── realtime_detect.py          <- Aplikasi deteksi real-time webcam/video + audio alert
-├── diagnostik_prototype.py     <- Script self-diagnostic & verifikasi kesiapan prototype
+├── app_upload.py               <- Dashboard Web interaktif (Streamlit)
+├── evaluate.py                 <- Evaluator empiris (Wilson CI, FAR, komparasi ensemble)
+├── realtime_detect.py          <- Aplikasi deteksi real-time webcam/video + threaded async
+├── diagnostik_prototype.py     <- Script self-diagnostic objektif (PASS / WARN / FAIL)
 ├── train.py                    <- Script training YOLOv8n-cls 3 kelas
-├── prepare_3class_dataset.py   <- Script integrasi dataset Kosong.zip & augmentasi 3-kelas
-├── prepare_combined_dataset.py <- Script penggabungan dataset lama
-├── generate_audio.py           <- Generator audio gTTS
+├── prepare_3class_dataset.py   <- Integrasi dataset Kosong (reproducible & idempotent)
 │
-├── jalankan_web_upload.bat     <- Sekali klik: Buka Dashboard Web Upload Foto
-├── uji_foto.bat                <- Sekali klik: Pilih foto dari komputer & uji
+├── jalankan_web_upload.bat     <- Sekali klik: Buka Dashboard Web
 ├── jalankan_deteksi.bat        <- Sekali klik: Jalankan deteksi webcam real-time
-├── uji_diagnostik_prototype.bat <- Sekali klik: Uji kesehatan & kesiapan lengkap prototype
-│
-├── Business_and_Data_Understanding.ipynb <- Notebook Jupyter interaktif (Code, EDA & Simulasi ROI)
-└── BUSINESS_AND_DATA_UNDERSTANDING.md   <- Dokumen teks Business & Data Understanding
+├── uji_diagnostik_prototype.bat <- Sekali klik: Uji kesehatan & kesiapan prototype
+└── uji_foto.bat                <- Sekali klik: Uji satu foto via file dialog
 ```
 
 ---
@@ -115,15 +116,38 @@ python diagnostik_prototype.py
 
 ---
 
-## 🧠 Fitur Pintar
+## 🧠 Fitur Pintar & Logika Real-Time
 
 1. **Dual Interface**: Mendukung pemantauan video stream kamera *real-time* sekaligus pengujian interaktif berbasis *upload foto*.
 2. **Event-Driven Motion Settlement Watcher**:
-   Sistem tidak mengevaluasi saat orang sedang melintas atau melepas sandal. Evaluasi cerdas dipicu tepat setelah pergerakan selesai (*settled*), mengeliminasi *false alarm* secara drastis.
-3. **Anti-Spam (Smart Cooldown)**:
-   Setelah peringatan suara berbunyi, sistem memberi waktu jeda agar orang yang merapikan tidak terganggu suara berulang.
-4. **Non-Blocking Multi-threaded Audio**:
-   Aplikasi tetap responsif dan lancar tanpa mengalami freeze saat audio diputar.
+   Sistem tidak mengevaluasi saat orang sedang melintas atau melepas sandal. Evaluasi cerdas dipicu tepat setelah pergerakan selesai (*settled* selama 1.8 detik), mengeliminasi *false alarm* secara drastis. Gerakan selama jeda cooldown tetap dicatat agar orang yang datang bergantian tidak terlewatkan.
+3. **Threaded Asynchronous Inference**:
+   Inferensi deep learning dijalankan pada antrean thread latar belakang (background worker) terpisah sehingga rendering kamera video tetap mulus pada 30+ FPS tanpa mengalami freeze/stutter.
+4. **Temporal Voting & Confidence Threshold**:
+   Peringatan suara hanya dipicu jika keyakinan model $\ge 70\%$ dan minimal 2 dari 3 evaluasi berurutan bernilai `BERANTAKAN`. Jika keyakinan di bawah ambang batas, status dialihkan ke `RAGU` dan audio dijeda demi mencegah alarm palsu.
+5. **Anti-Spam (Smart Cooldown)**:
+   Setelah peringatan suara berbunyi, sistem memberi waktu jeda cooldown (10 detik) agar praktikan dapat merapikan alas kakinya dengan tenang tanpa suara berulang-ulang.
+
+---
+
+## 🎯 Definisi Operasional Kelas
+
+| Kelas | Kriteria Visual Utama | Kasus Batas (Edge Cases) |
+|---|---|---|
+| **`RAPI`** | Sandal/sepatu diletakkan berdampingan secara berpasangan (kiri dan kanan sejajar menghadap arah yang sama), tersusun teratur di rak sandal atau di pinggir dinding koridor. | Jika satu pasang sandal sedikit serong namun tidak menghalangi jalur keluar-masuk pintu dan tidak bertumpuk, kondisi tetap dinilai sebagai **RAPI**. |
+| **`BERANTAKAN`** | Sandal terpisah jauh dari pasangannya, saling bertumpuk (*overlapping*), melintang acak di tengah pintu masuk lab, atau terbalik. | Jika sandal tertata berpasangan rapi namun diletakkan persis melintang di tengah pintu masuk (menghalangi K3 jalur evakuasi darurat), kondisi diklasifikasikan sebagai **BERANTAKAN**. |
+| **`KOSONG`** | Area lantai pemantauan bersih tanpa alas kaki (kondisi standby saat praktikum berlangsung atau di luar jam praktikum). | Mode standby murni; audio peringatan tidak akan pernah berbunyi pada kondisi ini. |
+
+---
+
+## ⚠️ Batasan Sistem & Karakteristik Model
+
+1. **Klasifikasi Citra, Bukan Deteksi Objek**:
+   Model ini berbasis arsitektur **YOLOv8n-cls (Image Classifier)** yang mengklasifikasikan status keseluruhan area lantai menjadi satu label keputusan (`BERANTAKAN`, `RAPI`, atau `KOSONG`), **bukan** object detection yang menghasilkan koordinat bounding box per masing-masing sandal.
+2. **Domain Shift (Kamera HP vs Webcam Real-Time)**:
+   Sebagian besar dataset dilatih dari sudut pemotretan smartphone (~45° hingga ~75°). Pada implementasi webcam permanen di atas pintu, pastikan sudut kemiringan kamera diarahkan pada area fokus lantai (*Drop Zone*) agar distribusi fitur visual tetap konsisten.
+3. **Kompatibilitas Sistem Operasi**:
+   Sistem dioptimalkan untuk Windows menggunakan driver `cv2.CAP_DSHOW` untuk inisialisasi instan tanpa lag buffer. Skrip Python tetap kompatibel dengan Linux / macOS dengan menggunakan backend video default `cv2.CAP_ANY`.
 
 ---
 
